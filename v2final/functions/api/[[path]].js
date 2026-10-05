@@ -1,37 +1,218 @@
-const TABLES = new Set(['ecosystems','chains','protocols','protocol_chains','tokens','token_identifiers','protocol_tokens','sources','documents','evidence','snapshots','metrics','token_supply_snapshots','token_allocations','vesting_schedules','unlock_schedules','unlock_events','emissions','research','risks','conclusions','valuations','money_flows','scenarios','comparisons','causal_claims','methodologies','evaluations','events','relationships','kg_nodes','kg_edges','research_projects','research_tasks','research_sessions','learning_records','mistake_bank','reviews','sync_queue','sync_logs','backups','automation_jobs','automation_runs','alerts','notifications','error_logs','review_queue','app_settings']);
-const NOW=()=>Date.now(); const id=()=>crypto.randomUUID();
-function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store',...extra}})}
-function err(code,message,status=400,field){return json({ok:false,error:{code,message,field}},status)}
-function table(x){return TABLES.has(x)?x:null}
-function routeParts(context){return (Array.isArray(context.params?.path)?context.params.path:String(context.params?.path||'').split('/')).filter(Boolean).map(decodeURIComponent)}
-function sanitize(obj){if(!obj||typeof obj!=='object'||Array.isArray(obj))return obj;const x={...obj};for(const k of Object.keys(x)){if(k.toLowerCase().includes('secret')||k.toLowerCase().includes('private_key')||k.toLowerCase().includes('cookie'))delete x[k]}return x}
-async function body(req){try{return await req.json()}catch{return {}}}
-async function list(db,t,url){const p=Number(url.searchParams.get('limit')||50);const limit=Math.min(Math.max(p,1),200);const offset=Math.max(Number(url.searchParams.get('offset')||0),0);const order=['snapshots','metrics','events','alerts','research','evidence','documents'].includes(t)?'created_at DESC':'updated_at DESC';const r=await db.prepare(`SELECT * FROM ${t} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(limit,offset).all();return r.results||[]}
-async function one(db,t,key){return await db.prepare(`SELECT * FROM ${t} WHERE id=? LIMIT 1`).bind(key).first()}
-function cols(item){return Object.keys(item).filter(k=>k!=='id'&&/^[A-Za-z_][A-Za-z0-9_]*$/.test(k))}
-async function insert(db,t,item){const x=sanitize(item);if(!x.id)x.id=id();const keys=cols(x);if(!keys.length)throw Error('empty payload');const qs=keys.map(()=>'?').join(',');const vals=keys.map(k=>typeof x[k]==='object'?JSON.stringify(x[k]):x[k]);await db.prepare(`INSERT INTO ${t}(id,${keys.join(',')}) VALUES(?,${qs})`).bind(x.id,...vals).run();return x}
-async function update(db,t,key,item){const x=sanitize(item);const keys=cols(x).filter(k=>k!=='created_at');if(!keys.length)return one(db,t,key);const set=keys.map(k=>`${k}=?`).join(',');const vals=keys.map(k=>typeof x[k]==='object'?JSON.stringify(x[k]):x[k]);await db.prepare(`UPDATE ${t} SET ${set} WHERE id=?`).bind(...vals,key).run();return one(db,t,key)}
-async function seed(db){
- const now=NOW();
- const e={id:'ecosystem:solana',name:'Solana',symbol:'SOL',description:'Solana ecosystem research root',website:'https://solana.com',created_at:now,updated_at:now};
- await db.prepare('INSERT OR IGNORE INTO ecosystems(id,name,symbol,description,website,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(e.id,e.name,e.symbol,e.description,e.website,e.created_at,e.updated_at).run();
- const source={id:'source:solana-official',name:'Solana Official',kind:'OFFICIAL',base_url:'https://solana.com',reliability_note:'Official project source',created_at:now,updated_at:now};
- await db.prepare('INSERT OR IGNORE INTO sources(id,name,kind,base_url,reliability_note,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(...Object.values(source)).run();
- const chain={id:'chain:solana',ecosystem_id:e.id,name:'Solana',symbol:'SOL',chain_type:'L1',chain_id:null,native_token_id:'token:solana:sol',created_at:now,updated_at:now};
- await db.prepare('INSERT OR IGNORE INTO chains(id,ecosystem_id,name,symbol,chain_type,chain_id,native_token_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(chain.id,chain.ecosystem_id,chain.name,chain.symbol,chain.chain_type,chain.chain_id,chain.native_token_id,chain.created_at,chain.updated_at).run();
- const protos=[['protocol:solana:jupiter','Jupiter','JUP','https://jup.ag'],['protocol:solana:raydium','Raydium','RAY','https://raydium.io'],['protocol:solana:jito','Jito','JTO','https://www.jito.network'],['protocol:solana:sanctum','Sanctum','CLOUD','https://sanctum.so']];
- for(const [id,name,symbol,website] of protos){await db.prepare('INSERT OR IGNORE INTO protocols(id,name,symbol,website,created_at,updated_at) VALUES(?,?,?,?,?,?)').bind(id,name,symbol,website,now,now).run();await db.prepare('INSERT OR IGNORE INTO protocol_chains(id,protocol_id,chain_id,status,valid_from,source_id,created_at) VALUES(?,?,?,?,?,?,?)').bind('pc:'+id, id, chain.id,'ACTIVE',now,source.id,now).run();}
- const toks=[['token:solana:sol','Solana','SOL',null,1],['token:solana:jto','Jito','JTO','jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL',0],['token:solana:jup','Jupiter','JUP',null,0],['token:solana:ray','Raydium','RAY',null,0],['token:solana:cloud','Sanctum','CLOUD','CLoUDKc4Ane7HeQcPpE3YHnznRxhMimJ4MyaUqyHFzAu',0]];
- for(const [id,name,symbol,contract,isNative] of toks){await db.prepare('INSERT OR IGNORE INTO tokens(id,chain_id,name,symbol,contract_address,is_native,representation_type,identity_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,chain.id,name,symbol,contract,isNative,'CANONICAL','CONFIRMED',now,now).run();}
- const links=[['protocol:solana:jupiter','token:solana:jup'],['protocol:solana:raydium','token:solana:ray'],['protocol:solana:jito','token:solana:jto'],['protocol:solana:sanctum','token:solana:cloud']];
- for(const [pid,tid] of links) await db.prepare('INSERT OR IGNORE INTO protocol_tokens(id,protocol_id,token_id,relation_type,created_at) VALUES(?,?,?,?,?)').bind('pt:'+pid,pid,tid,'ASSOCIATED_TOKEN',now).run();
+const TABLES = new Set([
+  'ecosystems','chains','protocols','protocol_chains','tokens',
+  'token_identifiers','protocol_tokens','sources','documents','evidence',
+  'snapshots','metrics','token_supply_snapshots','token_allocations',
+  'vesting_schedules','unlock_schedules','unlock_events','emissions',
+  'research','risks','conclusions','valuations','money_flows','scenarios',
+  'comparisons','causal_claims','methodologies','evaluations','events',
+  'relationships','kg_nodes','kg_edges','research_projects','research_tasks',
+  'research_sessions','learning_records','mistake_bank','reviews',
+  'sync_queue','sync_logs','backups','automation_jobs','automation_runs',
+  'alerts','notifications','error_logs','review_queue','app_settings'
+]);
+
+const NOW = () => Date.now();
+const id = () => crypto.randomUUID();
+
+function json(data, status = 200, extra = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'content-type': 'application/json;charset=utf-8',
+      'cache-control': 'no-store',
+      ...extra
+    }
+  });
 }
-async function proxy(request){const raw=new URL(request.url).searchParams.get('url');if(!raw)return err('INVALID_URL','url required');let u;try{u=new URL(raw)}catch{return err('INVALID_URL','invalid url')}const allowed=new Set(['api.coingecko.com','api.llama.fi','stablecoins.llama.fi','api.dexscreener.com']);if(u.protocol!=='https:'||!allowed.has(u.hostname))return err('SOURCE_NOT_ALLOWED','data source not allowed',403);const r=await fetch(u.toString(),{headers:{accept:'application/json'},cf:{cacheTtl:60,cacheEverything:true}});return new Response(await r.text(),{status:r.status,headers:{'content-type':r.headers.get('content-type')||'application/json','cache-control':'public,max-age=60'}})}
-export async function onRequest(context){const {request,env}=context;const db=env.DB;if(!db)return err('D1_NOT_CONFIGURED','D1 binding DB 未配置',503);const parts=routeParts(context);const r=parts[0];try{await seed(db);if(request.method==='GET'&&r==='health')return json({ok:true,version:'v2-final',storage:'D1',schema_version:'2.89',time:NOW()});if(r==='proxy'&&request.method==='GET')return proxy(request);if(r==='self-check'&&request.method==='GET'){const checks=[];for(const t of TABLES){try{await db.prepare(`SELECT 1 FROM ${t} LIMIT 1`).run();checks.push({name:t,level:'PASS'})}catch(e){checks.push({name:t,level:'FAIL',detail:e.message})}}return json({ok:true,checks})}
-if(r==='search'&&request.method==='GET'){const q=(new URL(request.url).searchParams.get('q')||'').trim();if(!q)return json({ok:true,items:[]});const like=`%${q}%`;const out=[];for(const t of ['ecosystems','chains','protocols','tokens']){const fields=t==='tokens'?'name LIKE ? OR symbol LIKE ? OR contract_address LIKE ?':'name LIKE ? OR symbol LIKE ?';const binds=t==='tokens'?[like,like,like]:[like,like];const rs=await db.prepare(`SELECT id,name,symbol FROM ${t} WHERE ${fields} LIMIT 20`).bind(...binds).all();out.push(...(rs.results||[]).map(x=>({...x,object_type:t.endsWith('s')?t.slice(0,-1):t})))}return json({ok:true,items:out.slice(0,50)})}
-if(r==='sync'&&request.method==='POST'){const b=await body(request);if(!b.idempotency_key)return err('IDEMPOTENCY_KEY_REQUIRED','idempotency_key required');const exists=await db.prepare('SELECT * FROM sync_queue WHERE idempotency_key=?').bind(b.idempotency_key).first();if(exists)return json({ok:true,deduplicated:true,item:exists});const q={id:id(),operation:b.operation,object_type:b.object_type,object_id:b.object_id,payload_json:JSON.stringify(sanitize(b.payload||{})),base_version:b.base_version??null,status:'DONE',retry_count:0,next_retry_at:null,last_error:null,idempotency_key:b.idempotency_key,created_at:NOW(),updated_at:NOW()};await insert(db,'sync_queue',q);return json({ok:true,item:q},201)}
-if(r==='backup'&&request.method==='GET'){const pack={schema_version:'2.89',generated_at:NOW(),tables:{}};let count=0,snaps=0;for(const t of TABLES){const rows=await db.prepare(`SELECT * FROM ${t}`).all();pack.tables[t]=rows.results||[];count+=pack.tables[t].length;if(t==='snapshots')snaps+=pack.tables[t].length}return json({ok:true,backup:{id:id(),...pack,object_count:count,snapshot_count:snaps}})}
-const t=table(r);if(!t)return err('NOT_FOUND','route not found',404);if(request.method==='GET'){if(parts[1]){const item=await one(db,t,parts.slice(1).join('/'));return json({ok:true,item:item||null})}return json({ok:true,items:await list(db,t,new URL(request.url))})}
-if(request.method==='POST'){const b=await body(request);if(t==='snapshots'&&b.id){}const item={...b,created_at:b.created_at||NOW()};try{return json({ok:true,item:await insert(db,t,item)},201)}catch(e){return err('VALIDATION_ERROR',e.message,422)}}
-if(request.method==='PUT'){if(!parts[1])return err('ID_REQUIRED','id required');if(t==='snapshots')return err('SNAPSHOT_IMMUTABLE','Snapshot 只允许 CREATE/READ',409);const item=await update(db,t,parts.slice(1).join('/'),await body(request));return item?json({ok:true,item}):err('NOT_FOUND','record not found',404)}
-if(request.method==='DELETE')return err('HISTORY_PROTECTED','核心研究数据不物理删除',409);return err('METHOD_NOT_ALLOWED','method not allowed',405)}catch(e){const request_id=id();try{await db.prepare('INSERT INTO error_logs(id,request_id,level,code,message,created_at) VALUES(?,?,?,?,?,?)').bind(id(),request_id,'ERROR','UNHANDLED',String(e.message||e),NOW()).run()}catch{}return err('INTERNAL_ERROR',String(e.message||e),500)} }
+
+function err(code, message, status = 400, field) {
+  return json({
+    ok: false,
+    error: {
+      code,
+      message,
+      field
+    }
+  }, status);
+}
+
+function table(x) {
+  return TABLES.has(x) ? x : null;
+}
+
+function routeParts(context) {
+  return (
+    Array.isArray(context.params?.path)
+      ? context.params.path
+      : String(context.params?.path || '').split('/')
+  )
+    .filter(Boolean)
+    .map(decodeURIComponent);
+}
+
+function sanitize(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+
+  const x = { ...obj };
+
+  for (const k of Object.keys(x)) {
+    const key = k.toLowerCase();
+
+    if (
+      key.includes('secret') ||
+      key.includes('private_key') ||
+      key.includes('cookie')
+    ) {
+      delete x[k];
+    }
+  }
+
+  return x;
+}
+
+async function body(req) {
+  try {
+    return await req.json();
+  } catch {
+    return {};
+  }
+}
+
+async function list(db, t, url) {
+  const p = Number(url.searchParams.get('limit') || 50);
+  const limit = Math.min(Math.max(p, 1), 200);
+  const offset = Math.max(
+    Number(url.searchParams.get('offset') || 0),
+    0
+  );
+
+  const order = [
+    'snapshots',
+    'metrics',
+    'events',
+    'alerts',
+    'research',
+    'evidence',
+    'documents'
+  ].includes(t)
+    ? 'created_at DESC'
+    : 'updated_at DESC';
+
+  const r = await db
+    .prepare(
+      `SELECT * FROM ${t} ORDER BY ${order} LIMIT ? OFFSET ?`
+    )
+    .bind(limit, offset)
+    .all();
+
+  return r.results || [];
+}
+
+async function one(db, t, key) {
+  return await db
+    .prepare(`SELECT * FROM ${t} WHERE id=? LIMIT 1`)
+    .bind(key)
+    .first();
+}
+
+function cols(item) {
+  return Object.keys(item).filter(
+    k =>
+      k !== 'id' &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)
+  );
+}
+
+async function insert(db, t, item) {
+  const x = sanitize(item);
+
+  if (!x.id) x.id = id();
+
+  const keys = cols(x);
+
+  if (!keys.length) {
+    throw Error('empty payload');
+  }
+
+  const qs = keys.map(() => '?').join(',');
+
+  const vals = keys.map(k =>
+    typeof x[k] === 'object'
+      ? JSON.stringify(x[k])
+      : x[k]
+  );
+
+  await db
+    .prepare(
+      `INSERT INTO ${t}(id,${keys.join(',')})
+       VALUES(?,${qs})`
+    )
+    .bind(x.id, ...vals)
+    .run();
+
+  return x;
+}
+
+async function update(db, t, key, item) {
+  const x = sanitize(item);
+
+  const keys = cols(x).filter(
+    k => k !== 'created_at'
+  );
+
+  if (!keys.length) {
+    return one(db, t, key);
+  }
+
+  const set = keys
+    .map(k => `${k}=?`)
+    .join(',');
+
+  const vals = keys.map(k =>
+    typeof x[k] === 'object'
+      ? JSON.stringify(x[k])
+      : x[k]
+  );
+
+  await db
+    .prepare(
+      `UPDATE ${t} SET ${set} WHERE id=?`
+    )
+    .bind(...vals, key)
+    .run();
+
+  return one(db, t, key);
+}
+
+async function seed(db) {
+  const now = NOW();
+
+  const e = {
+    id: 'ecosystem:solana',
+    name: 'Solana',
+    symbol: 'SOL',
+    description: 'Solana ecosystem research root',
+    website: 'https://solana.com',
+    created_at: now,
+    updated_at: now
+  };
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO ecosystems
+       (id,name,symbol,description,website,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?)`
+    )
+    .bind(
+      e.id,
+      e.name,
+      e.symbol,
+      e.description,
+      e.website,
+      e.created_at,
+      e.updated_at
+    )
+    .run();
+
+  const source = {
+    id:
