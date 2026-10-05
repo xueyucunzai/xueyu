@@ -1,12 +1,42 @@
-name = "xueyu"
-main = "_worker.js"
-compatibility_date = "2026-10-04"
+import { onRequest } from "./functions/api/[[path]].js";
 
-[assets]
-directory = "."
-binding = "ASSETS"
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
 
-[[d1_databases]]
-binding = "DB"
-database_name = "crypto-ecosystem-research"
-database_id = "35541318-dce9-4cc4-a358-fa09efcd7804"
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+      const path = url.pathname
+        .replace(/^\/api\/?/, "")
+        .split("/")
+        .filter(Boolean);
+
+      try {
+        return await onRequest({
+          request,
+          env,
+          params: { path },
+          waitUntil: ctx.waitUntil.bind(ctx)
+        });
+      } catch (error) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: "WORKER_API_ERROR",
+              message: String(error?.message || error)
+            }
+          }),
+          {
+            status: 500,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store"
+            }
+          }
+        );
+      }
+    }
+
+    return env.ASSETS.fetch(request);
+  }
+};
