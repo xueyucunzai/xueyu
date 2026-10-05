@@ -1,0 +1,40 @@
+name: Unzip ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unzip ZIP
+        run: |
+          mkdir -p extracted
+          unzip -o *.zip -d extracted
+
+      - name: Remove ZIP
+        run: |
+          rm -f *.zip
+
+      - name: Move files to root
+        run: |
+          shopt -s dotglob
+          for item in extracted/*; do
+            mv "$item" .
+          done
+          rm -rf extracted
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Unzip project files" || echo "No changes to commit"
+          git push
