@@ -20,6 +20,7 @@ const state = {
 
   selectedChain: null,
   selectedProtocol: null,
+  selectedToken: null,
 
   chainMetrics: {
     tvl: null,
@@ -55,6 +56,7 @@ const state = {
 
   protocolMetrics: {
     tvl: null,
+    tvlDate: null,
     tvlLoading: false,
     tvlError: null
   }
@@ -245,6 +247,15 @@ function formatDate(timestamp) {
 }
 
 
+function isFiniteNumber(value) {
+
+  return Number.isFinite(
+    Number(value)
+  );
+
+}
+
+
 /* =========================
    重置 Chain 指标
 ========================= */
@@ -297,6 +308,7 @@ function resetProtocolMetrics() {
   state.protocolMetrics = {
 
     tvl: null,
+    tvlDate: null,
     tvlLoading: false,
     tvlError: null
 
@@ -829,6 +841,15 @@ async function loadProtocolTvl(
 
   if (!slug) {
 
+    state.protocolMetrics
+      .tvlLoading = false;
+
+    state.protocolMetrics
+      .tvlError =
+        "缺少 DeFiLlama Source ID";
+
+    render();
+
     return;
 
   }
@@ -927,13 +948,12 @@ async function loadProtocolTvl(
     state.protocolMetrics.tvl =
       value;
 
+    state.protocolMetrics
+      .tvlDate =
+      date;
 
     state.protocolMetrics
       .tvlError = null;
-
-
-    state.protocolMetrics
-      .tvlDate = date;
 
 
   } catch (error) {
@@ -947,10 +967,8 @@ async function loadProtocolTvl(
     state.protocolMetrics.tvl =
       null;
 
-
     state.protocolMetrics
       .tvlDate = null;
-
 
     state.protocolMetrics
       .tvlError =
@@ -971,6 +989,186 @@ async function loadProtocolTvl(
     render();
 
   }
+
+}
+
+
+/* =========================
+   Protocol Token 提取
+========================= */
+
+/*
+  后端返回结构目前可能存在不同版本。
+
+  这里不制造数据，只从已经返回的
+  protocol 对象中寻找关联 Token。
+
+  支持：
+
+  protocol.token
+  protocol.tokens
+  protocol.protocol_tokens
+  protocol.associated_token
+  protocol.associated_tokens
+
+  如果后端没有返回 Token，
+  页面明确显示 NO_DATA。
+*/
+
+function getProtocolTokens(
+  protocol
+) {
+
+  if (!protocol) {
+
+    return [];
+
+  }
+
+
+  const candidates = [];
+
+
+  const add = (value) => {
+
+    if (!value) {
+
+      return;
+
+    }
+
+
+    if (Array.isArray(value)) {
+
+      value.forEach(add);
+
+      return;
+
+    }
+
+
+    if (
+      typeof value === "object"
+    ) {
+
+      candidates.push(value);
+
+    }
+
+  };
+
+
+  add(protocol.token);
+
+  add(protocol.tokens);
+
+  add(protocol.protocol_token);
+
+  add(protocol.protocol_tokens);
+
+  add(protocol.associated_token);
+
+  add(protocol.associated_tokens);
+
+
+  const result = [];
+
+
+  const seen = new Set();
+
+
+  candidates.forEach((token) => {
+
+    const key =
+      String(
+        token.id ||
+        token.address ||
+        token.contract_address ||
+        token.symbol ||
+        token.name ||
+        ""
+      ).toLowerCase();
+
+
+    if (!key) {
+
+      return;
+
+    }
+
+
+    if (
+      seen.has(key)
+    ) {
+
+      return;
+
+    }
+
+
+    seen.add(key);
+
+    result.push(token);
+
+  });
+
+
+  return result;
+
+}
+
+
+/* =========================
+   Token Identity
+========================= */
+
+function tokenIdentity(
+  token
+) {
+
+  if (!token) {
+
+    return {
+      name: "Unknown",
+      symbol: "-",
+      chain: "NO_DATA",
+      contract: "NO_DATA",
+      source: "NO_DATA"
+    };
+
+  }
+
+
+  return {
+
+    name:
+      token.name ||
+      token.token_name ||
+      "Unknown",
+
+    symbol:
+      token.symbol ||
+      token.ticker ||
+      "-",
+
+    chain:
+      token.chain ||
+      token.chain_name ||
+      token.network ||
+      "NO_DATA",
+
+    contract:
+      token.contract_address ||
+      token.address ||
+      token.contract ||
+      "NO_DATA",
+
+    source:
+      token.source ||
+      token.source_label ||
+      "NO_DATA"
+
+  };
 
 }
 
@@ -1148,7 +1346,11 @@ function render() {
 
               ? protocolPage()
 
-              : dashboardPage()
+              : state.page === "token"
+
+                ? tokenPage()
+
+                : dashboardPage()
       }
 
     </main>
@@ -1336,7 +1538,17 @@ function searchGroup(
 
                     `
 
-                    : ""
+                    : type === "token"
+
+                      ? `
+
+                        <div class="search-action">
+                          查看代币 →
+                        </div>
+
+                      `
+
+                      : ""
 
               }
 
@@ -1664,131 +1876,42 @@ function ecosystemPage() {
 
         ${
           m.tvlError
-
-            ? `
-
-              <p class="muted">
-
-                TVL 数据读取失败：
-
-                ${esc(
-                  m.tvlError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">TVL 数据读取失败：${esc(m.tvlError)}</p>`
             : ""
         }
 
 
         ${
           m.stablecoinsError
-
-            ? `
-
-              <p class="muted">
-
-                Stablecoins
-                数据读取失败：
-
-                ${esc(
-                  m.stablecoinsError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">Stablecoins 数据读取失败：${esc(m.stablecoinsError)}</p>`
             : ""
         }
 
 
         ${
           m.dexVolumeError
-
-            ? `
-
-              <p class="muted">
-
-                DEX Volume
-                数据读取失败：
-
-                ${esc(
-                  m.dexVolumeError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">DEX Volume 数据读取失败：${esc(m.dexVolumeError)}</p>`
             : ""
         }
 
 
         ${
           m.feesError
-
-            ? `
-
-              <p class="muted">
-
-                Fees
-                数据读取失败：
-
-                ${esc(
-                  m.feesError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">Fees 数据读取失败：${esc(m.feesError)}</p>`
             : ""
         }
 
 
         ${
           m.revenueError
-
-            ? `
-
-              <p class="muted">
-
-                Revenue
-                数据读取失败：
-
-                ${esc(
-                  m.revenueError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">Revenue 数据读取失败：${esc(m.revenueError)}</p>`
             : ""
         }
 
 
         ${
           m.usersError
-
-            ? `
-
-              <p class="muted">
-
-                Users
-                数据读取失败：
-
-                ${esc(
-                  m.usersError
-                )}
-
-              </p>
-
-            `
-
+            ? `<p class="muted">Users 数据读取失败：${esc(m.usersError)}</p>`
             : ""
         }
 
@@ -1904,6 +2027,77 @@ function ecosystemPage() {
 
 
 /* =========================
+   Protocol Token Card
+========================= */
+
+function protocolTokenCard(
+  token
+) {
+
+  const t =
+    tokenIdentity(token);
+
+
+  return `
+
+    <div
+      class="card"
+      data-protocol-token="true"
+      style="cursor:pointer"
+    >
+
+      <div class="search-main">
+
+        <div class="search-name">
+
+          ${esc(t.name)}
+
+          ${
+            t.symbol !== "-"
+
+              ? `
+
+                <span class="tag">
+                  ${esc(t.symbol)}
+                </span>
+
+              `
+
+              : ""
+          }
+
+        </div>
+
+
+        <div class="search-source">
+
+          Token / 关联代币
+
+          ·
+
+          ${esc(t.chain)}
+
+        </div>
+
+      </div>
+
+
+      <div class="muted">
+
+        Contract：
+
+        ${esc(t.contract)}
+
+      </div>
+
+    </div>
+
+  `;
+
+}
+
+
+/* =========================
    Protocol Page
 ========================= */
 
@@ -1937,6 +2131,17 @@ function protocolPage() {
       : [];
 
 
+  const website =
+    protocol.website ||
+    "";
+
+
+  const associatedTokens =
+    getProtocolTokens(
+      protocol
+    );
+
+
   const tvl =
     state.protocolMetrics.tvl;
 
@@ -1961,11 +2166,6 @@ function protocolPage() {
       formatUSD(tvl);
 
   }
-
-
-  const website =
-    protocol.website ||
-    "";
 
 
   return `
@@ -2187,6 +2387,53 @@ function protocolPage() {
       <div class="panel">
 
         <h2>
+          Associated Token / 关联代币
+        </h2>
+
+
+        ${
+          associatedTokens.length
+
+            ? `
+
+              <div class="search-list">
+
+                ${associatedTokens
+                  .map(
+                    protocolTokenCard
+                  )
+                  .join("")}
+
+              </div>
+
+            `
+
+            : `
+
+              <div class="empty">
+
+                NO_DATA
+
+                <p class="muted">
+
+                  当前 Protocol 对象没有返回
+                  可确认的关联 Token。
+
+                  不根据协议名称猜测 Token。
+
+                </p>
+
+              </div>
+
+            `
+        }
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
           Supported Chains / 所属链
         </h2>
 
@@ -2300,6 +2547,29 @@ function protocolPage() {
 
           <div>
 
+            Associated Token
+
+            <span
+              class="${
+                associatedTokens.length
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
+
+              ${
+                associatedTokens.length
+                  ? "✓ 已找到关联 Token"
+                  : "NO_DATA"
+              }
+
+            </span>
+
+          </div>
+
+
+          <div>
+
             TVL
 
             <span
@@ -2318,6 +2588,346 @@ function protocolPage() {
                 )
 
                   ? "✓ 已取得真实数据"
+
+                  : "NO_DATA"
+              }
+
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Research
+
+            <span class="status-wait">
+              未开始
+            </span>
+
+          </div>
+
+
+        </div>
+
+      </div>
+
+
+    </section>
+
+  `;
+
+}
+
+
+/* =========================
+   Token Page
+========================= */
+
+function tokenPage() {
+
+  const token =
+    state.selectedToken || {};
+
+
+  const t =
+    tokenIdentity(token);
+
+
+  const price =
+    token.price ??
+    token.current_price ??
+    token.price_usd;
+
+
+  const marketCap =
+    token.market_cap ??
+    token.marketCap;
+
+
+  const fdv =
+    token.fdv ??
+    token.fully_diluted_valuation;
+
+
+  const totalSupply =
+    token.total_supply ??
+    token.totalSupply;
+
+
+  const circulatingSupply =
+    token.circulating_supply ??
+    token.circulatingSupply;
+
+
+  return `
+
+    <section>
+
+
+      <button
+        id="backSearch"
+        class="button"
+      >
+        ← 返回搜索
+      </button>
+
+
+      <div class="hero">
+
+        <h1>
+          ${esc(t.name)}
+        </h1>
+
+        <p class="muted">
+
+          ${esc(t.name)}
+
+          ·
+
+          ${esc(t.symbol)}
+
+        </p>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Token Identity / 代币身份
+        </h2>
+
+
+        <div class="data-grid">
+
+
+          <div class="card">
+
+            <b>
+              Name
+            </b>
+
+            <p>
+              ${esc(t.name)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Symbol
+            </b>
+
+            <p>
+              ${esc(t.symbol)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Chain
+            </b>
+
+            <p>
+              ${esc(t.chain)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Contract Address
+            </b>
+
+            <p>
+              ${esc(t.contract)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Data Source
+            </b>
+
+            <p>
+              ${esc(t.source)}
+            </p>
+
+          </div>
+
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Market Data / 市场数据
+        </h2>
+
+
+        <div class="data-grid">
+
+
+          ${metricCard(
+            "Price / 价格",
+            isFiniteNumber(price)
+              ? formatUSD(price)
+              : "NO_DATA",
+            "只有后端确认的市场数据才显示"
+          )}
+
+
+          ${metricCard(
+            "Market Cap / 市值",
+            isFiniteNumber(marketCap)
+              ? formatUSD(marketCap)
+              : "NO_DATA",
+            "流通市值"
+          )}
+
+
+          ${metricCard(
+            "FDV / 全稀释估值",
+            isFiniteNumber(fdv)
+              ? formatUSD(fdv)
+              : "NO_DATA",
+            "Fully Diluted Valuation"
+          )}
+
+
+          ${metricCard(
+            "Total Supply / 总供应量",
+            isFiniteNumber(totalSupply)
+              ? formatNumber(totalSupply)
+              : "NO_DATA",
+            "Token 总供应量"
+          )}
+
+
+          ${metricCard(
+            "Circulating Supply / 流通量",
+            isFiniteNumber(circulatingSupply)
+              ? formatNumber(circulatingSupply)
+              : "NO_DATA",
+            "当前流通供应量"
+          )}
+
+
+        </div>
+
+
+        <p class="muted">
+
+          页面不会根据 Symbol 或名称猜测价格、市值或 FDV。
+
+          无法确认时保持 NO_DATA。
+
+        </p>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Research Status / 研究状态
+        </h2>
+
+
+        <div class="status-list">
+
+
+          <div>
+
+            Identity
+
+            <span class="status-ok">
+              ✓ 已建立
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Chain
+
+            <span
+              class="${
+                t.chain !== "NO_DATA"
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
+
+              ${
+                t.chain !== "NO_DATA"
+                  ? "✓ 已确认"
+                  : "NO_DATA"
+              }
+
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Contract
+
+            <span
+              class="${
+                t.contract !== "NO_DATA"
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
+
+              ${
+                t.contract !== "NO_DATA"
+                  ? "✓ 已确认"
+                  : "NO_DATA"
+              }
+
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Market Data
+
+            <span
+              class="${
+                isFiniteNumber(price) ||
+                isFiniteNumber(marketCap) ||
+                isFiniteNumber(fdv)
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
+
+              ${
+                isFiniteNumber(price) ||
+                isFiniteNumber(marketCap) ||
+                isFiniteNumber(fdv)
+
+                  ? "✓ 已取得部分真实数据"
 
                   : "NO_DATA"
               }
@@ -2465,6 +3075,10 @@ function bind() {
   }
 
 
+  /* =====================
+     Search Result
+  ===================== */
+
   document
     .querySelectorAll(
       "[data-result]"
@@ -2541,21 +3155,20 @@ function bind() {
           type === "token"
         ) {
 
-          alert(
+          state.selectedToken =
+            x;
 
-            `${x?.name || "Unknown"}\n\n` +
 
-            `类型：代币\n` +
+          state.page =
+            "token";
 
-            `来源：${
-              x?.source ||
-              x?.source_label ||
-              "-"
-            }\n\n` +
 
-            `Token 页面将在下一阶段接入。`
+          location.hash =
+            "token";
 
-          );
+
+          render();
+
 
           return;
 
@@ -2603,14 +3216,6 @@ function bind() {
         render();
 
 
-        /*
-          六个指标同时读取。
-
-          如果某个接口失败，
-          该指标保持 NO_DATA，
-          不影响其他指标。
-        */
-
         loadChainTvl(x);
 
         loadChainStablecoins(x);
@@ -2627,6 +3232,58 @@ function bind() {
 
     });
 
+
+  /* =====================
+     Protocol Token
+  ===================== */
+
+  document
+    .querySelectorAll(
+      "[data-protocol-token]"
+    )
+    .forEach((item, index) => {
+
+      item.onclick = () => {
+
+        const tokens =
+          getProtocolTokens(
+            state.selectedProtocol
+          );
+
+
+        const token =
+          tokens[index];
+
+
+        if (!token) {
+
+          return;
+
+        }
+
+
+        state.selectedToken =
+          token;
+
+
+        state.page =
+          "token";
+
+
+        location.hash =
+          "token";
+
+
+        render();
+
+      };
+
+    });
+
+
+  /* =====================
+     Back Search
+  ===================== */
 
   const backSearch =
     document.querySelector(
