@@ -15,7 +15,8 @@ const NAV = [
 const state = {
   page: location.hash.slice(1) || "dashboard",
   search: [],
-  query: ""
+  query: "",
+  selectedChain: null
 };
 
 const esc = (x) =>
@@ -73,7 +74,9 @@ function render() {
       ${
         state.page === "search"
           ? searchPage()
-          : dashboardPage()
+          : state.page === "ecosystem"
+            ? ecosystemPage()
+            : dashboardPage()
       }
 
     </main>
@@ -105,8 +108,8 @@ function dashboardPage() {
         </p>
 
         <p class="muted">
-          Search 已连接 D1，
-          并支持 DeFiLlama 公链搜索。
+          Search、D1 和 DeFiLlama
+          公链搜索已经连接。
         </p>
 
       </div>
@@ -115,93 +118,134 @@ function dashboardPage() {
   `;
 }
 
-function searchGroup(title, items) {
+function searchGroup(title, items, type) {
   if (!items.length) {
-    return "";
+    return `
+      <section class="search-section">
+
+        <h2>
+          ${title}
+        </h2>
+
+        <div class="empty">
+          暂无相关结果
+        </div>
+
+      </section>
+    `;
   }
 
   return `
-    <div class="search-group">
+    <section class="search-section">
 
-      <h3>
+      <h2>
         ${title}
-      </h3>
+      </h2>
 
-      ${items.map((x) => {
+      <div class="search-list">
 
-        const index =
-          state.search.indexOf(x);
+        ${items.map((x) => {
 
-        return `
-          <div
-            class="card"
-            data-result="${index}"
-            style="cursor:pointer"
-          >
+          const index =
+            state.search.indexOf(x);
 
-            <b>
-              ${esc(
-                x.name ||
-                x.symbol ||
-                "Unknown"
-              )}
-            </b>
+          const isChain =
+            type === "chain";
 
-            ${
-              x.symbol
-                ? `
-                  <span class="tag">
-                    ${esc(x.symbol)}
-                  </span>
-                `
-                : ""
-            }
+          return `
+            <div
+              class="card search-card"
+              data-result="${index}"
+              data-type="${type}"
+              style="cursor:pointer"
+            >
 
-            <p class="muted">
-              ${esc(
-                x.object_type ||
-                "object"
-              )}
-              ·
-              ${esc(
-                x.source ||
-                x.source_label ||
-                "D1"
-              )}
-            </p>
+              <div class="search-main">
 
-          </div>
-        `;
-      }).join("")}
+                <div class="search-name">
+                  ${esc(
+                    x.name ||
+                    x.symbol ||
+                    "Unknown"
+                  )}
 
-    </div>
+                  ${
+                    x.symbol
+                      ? `
+                        <span class="tag">
+                          ${esc(x.symbol)}
+                        </span>
+                      `
+                      : ""
+                  }
+
+                </div>
+
+                <div class="search-source">
+                  ${esc(
+                    x.object_type === "chain"
+                      ? "公链"
+                      : x.object_type === "protocol"
+                        ? "协议"
+                        : x.object_type === "token"
+                          ? "代币"
+                          : "对象"
+                  )}
+
+                  ·
+
+                  ${esc(
+                    x.source ||
+                    x.source_label ||
+                    "D1"
+                  )}
+                </div>
+
+              </div>
+
+              ${
+                isChain
+                  ? `
+                    <div class="search-action">
+                      进入生态 →
+                    </div>
+                  `
+                  : ""
+              }
+
+            </div>
+          `;
+
+        }).join("")}
+
+      </div>
+
+    </section>
   `;
 }
 
 function searchPage() {
 
   const chains =
-    state.search.filter(
-      x => x.object_type === "chain"
-    );
+    state.search
+      .filter(
+        x => x.object_type === "chain"
+      )
+      .slice(0, 10);
 
   const protocols =
-    state.search.filter(
-      x => x.object_type === "protocol"
-    );
+    state.search
+      .filter(
+        x => x.object_type === "protocol"
+      )
+      .slice(0, 10);
 
   const tokens =
-    state.search.filter(
-      x => x.object_type === "token"
-    );
-
-  const others =
-    state.search.filter(
-      x =>
-        x.object_type !== "chain" &&
-        x.object_type !== "protocol" &&
-        x.object_type !== "token"
-    );
+    state.search
+      .filter(
+        x => x.object_type === "token"
+      )
+      .slice(0, 10);
 
   return `
     <section>
@@ -210,14 +254,30 @@ function searchPage() {
         Search / Identity
       </h1>
 
+      <p class="muted">
+        搜索公链、协议和代币。
+        公链优先显示。
+      </p>
+
       <div class="panel">
 
-        <input
-          id="searchInput"
-          class="input"
-          placeholder="搜索 Ethereum / Solana / BNB / JUP..."
-          value="${esc(state.query)}"
-        >
+        <div class="search-box">
+
+          <input
+            id="searchInput"
+            class="input"
+            placeholder="例如：Ethereum / Solana / BNB"
+            value="${esc(state.query)}"
+          >
+
+          <button
+            id="searchButton"
+            class="button"
+          >
+            搜索
+          </button>
+
+        </div>
 
         <div id="searchResults">
 
@@ -225,28 +285,26 @@ function searchPage() {
             state.search.length
               ? `
                 ${searchGroup(
-                  "⭐ Chain / 公链",
-                  chains
+                  "⭐ 公链 Chain",
+                  chains,
+                  "chain"
                 )}
 
                 ${searchGroup(
-                  "Protocol / 协议",
-                  protocols
+                  "🧩 协议 Protocol",
+                  protocols,
+                  "protocol"
                 )}
 
                 ${searchGroup(
-                  "Token / 代币",
-                  tokens
-                )}
-
-                ${searchGroup(
-                  "Other / 其他",
-                  others
+                  "🪙 代币 Token",
+                  tokens,
+                  "token"
                 )}
               `
               : `
                 <div class="empty">
-                  输入关键词搜索。
+                  输入关键词开始搜索。
                 </div>
               `
           }
@@ -256,6 +314,200 @@ function searchPage() {
       </div>
 
     </section>
+  `;
+}
+
+function ecosystemPage() {
+
+  const chain =
+    state.selectedChain || {};
+
+  const name =
+    chain.name ||
+    "Unknown";
+
+  const symbol =
+    chain.symbol ||
+    "-";
+
+  return `
+    <section>
+
+      <button
+        id="backSearch"
+        class="button"
+      >
+        ← 返回搜索
+      </button>
+
+      <div class="hero">
+
+        <h1>
+          ${esc(name)}
+        </h1>
+
+        <p class="muted">
+          ${esc(name)}
+          ·
+          ${esc(symbol)}
+        </p>
+
+      </div>
+
+      <div class="panel">
+
+        <h2>
+          基本身份
+        </h2>
+
+        <div class="data-grid">
+
+          <div class="card">
+            <b>类型</b>
+            <p>Chain / 公链</p>
+          </div>
+
+          <div class="card">
+            <b>Symbol</b>
+            <p>${esc(symbol)}</p>
+          </div>
+
+          <div class="card">
+            <b>数据来源</b>
+            <p>
+              ${esc(
+                chain.source ||
+                chain.source_label ||
+                "DeFiLlama"
+              )}
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <h2>
+          生态研究
+        </h2>
+
+        <div class="data-grid">
+
+          ${metricCard(
+            "TVL",
+            "NO_DATA",
+            "Total Value Locked · 总锁仓价值"
+          )}
+
+          ${metricCard(
+            "Stablecoins",
+            "NO_DATA",
+            "稳定币规模"
+          )}
+
+          ${metricCard(
+            "DEX Volume",
+            "NO_DATA",
+            "去中心化交易所交易量"
+          )}
+
+          ${metricCard(
+            "Fees",
+            "NO_DATA",
+            "协议产生的费用"
+          )}
+
+          ${metricCard(
+            "Revenue",
+            "NO_DATA",
+            "协议收入"
+          )}
+
+          ${metricCard(
+            "Users",
+            "NO_DATA",
+            "用户 / 活跃地址"
+          )}
+
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <h2>
+          Protocols / 协议
+        </h2>
+
+        <div class="empty">
+          生态协议数据将在下一阶段接入。
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <h2>
+          研究状态
+        </h2>
+
+        <div class="status-list">
+
+          <div>
+            Identity
+            <span class="status-ok">
+              ✓ 已识别
+            </span>
+          </div>
+
+          <div>
+            Ecosystem
+            <span class="status-ok">
+              ✓ 已建立
+            </span>
+          </div>
+
+          <div>
+            Metrics
+            <span class="status-wait">
+              NO_DATA
+            </span>
+          </div>
+
+          <div>
+            Research
+            <span class="status-wait">
+              未开始
+            </span>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+  `;
+}
+
+function metricCard(title, value, description) {
+  return `
+    <div class="card">
+
+      <b>
+        ${title}
+      </b>
+
+      <h2>
+        ${value}
+      </h2>
+
+      <p class="muted">
+        ${description}
+      </p>
+
+    </div>
   `;
 }
 
@@ -281,49 +533,58 @@ function bind() {
   const input =
     document.querySelector("#searchInput");
 
-  if (input) {
+  const searchButton =
+    document.querySelector("#searchButton");
 
-    input.onkeydown = async (e) => {
+  async function doSearch() {
 
-      if (e.key !== "Enter") {
-        return;
-      }
+    const q =
+      input?.value.trim();
 
-      const q =
-        input.value.trim();
+    if (!q) return;
 
-      if (!q) {
-        return;
-      }
+    state.query = q;
 
-      state.query = q;
+    try {
 
-      try {
-
-        const result =
-          await api(
-            "search?q=" +
-            encodeURIComponent(q)
-          );
-
-        state.search =
-          result.items || [];
-
-      } catch (error) {
-
-        state.search = [];
-
-        console.error(
-          "Search error:",
-          error
+      const result =
+        await api(
+          "search?q=" +
+          encodeURIComponent(q)
         );
 
-      }
+      state.search =
+        result.items || [];
 
-      render();
+    } catch (error) {
+
+      state.search = [];
+
+      console.error(
+        "Search error:",
+        error
+      );
+
+    }
+
+    render();
+  }
+
+  if (input) {
+
+    input.onkeydown = (e) => {
+
+      if (e.key === "Enter") {
+        doSearch();
+      }
 
     };
 
+  }
+
+  if (searchButton) {
+    searchButton.onclick =
+      doSearch;
   }
 
   document.querySelectorAll("[data-result]")
@@ -336,12 +597,32 @@ function bind() {
             item.dataset.result
           );
 
+        const type =
+          item.dataset.type;
+
         const x =
           state.search[index];
 
+        if (type === "chain") {
+
+          state.selectedChain = x;
+
+          state.page =
+            "ecosystem";
+
+          location.hash =
+            "ecosystem";
+
+          render();
+
+          return;
+        }
+
         alert(
           `${x?.name || "Unknown"}\n\n` +
-          `类型：${x?.object_type || "-"}\n` +
+          `类型：${
+            x?.object_type || "-"
+          }\n` +
           `来源：${
             x?.source ||
             x?.source_label ||
@@ -352,6 +633,25 @@ function bind() {
       };
 
     });
+
+  const backSearch =
+    document.querySelector("#backSearch");
+
+  if (backSearch) {
+
+    backSearch.onclick = () => {
+
+      state.page =
+        "search";
+
+      location.hash =
+        "search";
+
+      render();
+
+    };
+
+  }
 
 }
 
