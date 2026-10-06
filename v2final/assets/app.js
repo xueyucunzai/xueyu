@@ -14,9 +14,12 @@ const NAV = [
 
 const state = {
   page: location.hash.slice(1) || "dashboard",
+
   search: [],
   query: "",
+
   selectedChain: null,
+  selectedProtocol: null,
 
   chainMetrics: {
     tvl: null,
@@ -48,6 +51,12 @@ const state = {
     usersDate: null,
     usersLoading: false,
     usersError: null
+  },
+
+  protocolMetrics: {
+    tvl: null,
+    tvlLoading: false,
+    tvlError: null
   }
 };
 
@@ -67,17 +76,29 @@ const esc = (x) =>
 
 
 async function api(path) {
-  const r = await fetch(API + path, {
-    cache: "no-store"
-  });
 
-  const data = await r.json().catch(() => ({}));
+  const r = await fetch(
+    API + path,
+    {
+      cache: "no-store"
+    }
+  );
 
-  if (!r.ok || data.ok === false) {
+  const data =
+    await r.json().catch(
+      () => ({})
+    );
+
+  if (
+    !r.ok ||
+    data.ok === false
+  ) {
+
     throw new Error(
       data.error?.message ||
       `HTTP ${r.status}`
     );
+
   }
 
   return data;
@@ -85,6 +106,7 @@ async function api(path) {
 
 
 async function fetchProxy(target) {
+
   const r = await fetch(
     API +
     "proxy?url=" +
@@ -95,9 +117,11 @@ async function fetchProxy(target) {
   );
 
   if (!r.ok) {
+
     throw new Error(
       `HTTP ${r.status}`
     );
+
   }
 
   return r.json();
@@ -109,34 +133,48 @@ async function fetchProxy(target) {
 ========================= */
 
 function formatUSD(value) {
-  const n = Number(value);
 
-  if (!Number.isFinite(n)) {
+  const n =
+    Number(value);
+
+  if (
+    !Number.isFinite(n)
+  ) {
+
     return "NO_DATA";
+
   }
 
   if (n >= 1e12) {
+
     return "$" +
       (n / 1e12).toFixed(2) +
       "T";
+
   }
 
   if (n >= 1e9) {
+
     return "$" +
       (n / 1e9).toFixed(2) +
       "B";
+
   }
 
   if (n >= 1e6) {
+
     return "$" +
       (n / 1e6).toFixed(2) +
       "M";
+
   }
 
   if (n >= 1e3) {
+
     return "$" +
       (n / 1e3).toFixed(2) +
       "K";
+
   }
 
   return "$" +
@@ -145,10 +183,16 @@ function formatUSD(value) {
 
 
 function formatNumber(value) {
-  const n = Number(value);
 
-  if (!Number.isFinite(n)) {
+  const n =
+    Number(value);
+
+  if (
+    !Number.isFinite(n)
+  ) {
+
     return "NO_DATA";
+
   }
 
   return new Intl.NumberFormat(
@@ -161,18 +205,31 @@ function formatNumber(value) {
 
 
 function formatDate(timestamp) {
-  const n = Number(timestamp);
 
-  if (!Number.isFinite(n)) {
+  const n =
+    Number(timestamp);
+
+  if (
+    !Number.isFinite(n)
+  ) {
+
     return "-";
+
   }
 
-  const d = new Date(
-    n * 1000
-  );
+  const d =
+    new Date(
+      n * 1000
+    );
 
-  if (Number.isNaN(d.getTime())) {
+  if (
+    Number.isNaN(
+      d.getTime()
+    )
+  ) {
+
     return "-";
+
   }
 
   return d.toLocaleString(
@@ -189,10 +246,11 @@ function formatDate(timestamp) {
 
 
 /* =========================
-   重置指标
+   重置 Chain 指标
 ========================= */
 
 function resetMetrics() {
+
   state.chainMetrics = {
 
     tvl: null,
@@ -224,12 +282,31 @@ function resetMetrics() {
     usersDate: null,
     usersLoading: false,
     usersError: null
+
   };
+
 }
 
 
 /* =========================
-   通用指标读取器
+   重置 Protocol 指标
+========================= */
+
+function resetProtocolMetrics() {
+
+  state.protocolMetrics = {
+
+    tvl: null,
+    tvlLoading: false,
+    tvlError: null
+
+  };
+
+}
+
+
+/* =========================
+   通用 Chain 指标读取器
 ========================= */
 
 async function loadMetric(
@@ -240,19 +317,24 @@ async function loadMetric(
   loadingKey
 ) {
 
-  const name = String(
-    chain?.name ||
-    chain?.chain ||
-    ""
-  ).trim();
+  const name =
+    String(
+      chain?.name ||
+      chain?.chain ||
+      ""
+    ).trim();
 
 
   if (!name) {
+
     return;
+
   }
 
 
-  state.chainMetrics[loadingKey] = true;
+  state.chainMetrics[
+    loadingKey
+  ] = true;
 
   state.chainMetrics[
     key + "Error"
@@ -266,6 +348,7 @@ async function loadMetric(
     const target =
       targetBuilder(name);
 
+
     console.log(
       `[${key}] Request:`,
       target
@@ -273,7 +356,9 @@ async function loadMetric(
 
 
     const raw =
-      await fetchProxy(target);
+      await fetchProxy(
+        target
+      );
 
 
     console.log(
@@ -303,6 +388,7 @@ async function loadMetric(
     state.chainMetrics[key] =
       Number(result.value);
 
+
     state.chainMetrics[
       key + "Date"
     ] =
@@ -310,6 +396,7 @@ async function loadMetric(
       Math.floor(
         Date.now() / 1000
       );
+
 
     state.chainMetrics[
       key + "Error"
@@ -348,7 +435,9 @@ async function loadMetric(
   if (
     state.page === "ecosystem"
   ) {
+
     render();
+
   }
 
 }
@@ -363,8 +452,12 @@ function parseLatestArray(
   valueGetter
 ) {
 
-  if (!Array.isArray(data)) {
+  if (
+    !Array.isArray(data)
+  ) {
+
     return null;
+
   }
 
 
@@ -377,10 +470,12 @@ function parseLatestArray(
     const row =
       data[i];
 
+
     const value =
       Number(
         valueGetter(row)
       );
+
 
     const date =
       Number(
@@ -405,6 +500,7 @@ function parseLatestArray(
 
 
   return null;
+
 }
 
 
@@ -412,7 +508,9 @@ function parseLatestArray(
    TVL
 ========================= */
 
-async function loadChainTvl(chain) {
+async function loadChainTvl(
+  chain
+) {
 
   return loadMetric(
 
@@ -503,11 +601,14 @@ async function loadChainDexVolume(
       ) {
 
         return {
+
           value,
+
           date:
             Math.floor(
               Date.now() / 1000
             )
+
         };
 
       }
@@ -558,11 +659,14 @@ async function loadChainFees(
       ) {
 
         return {
+
           value,
+
           date:
             Math.floor(
               Date.now() / 1000
             )
+
         };
 
       }
@@ -613,11 +717,14 @@ async function loadChainRevenue(
       ) {
 
         return {
+
           value,
+
           date:
             Math.floor(
               Date.now() / 1000
             )
+
         };
 
       }
@@ -666,11 +773,14 @@ async function loadChainUsers(
       ) {
 
         return {
+
           value,
+
           date:
             Math.floor(
               Date.now() / 1000
             )
+
         };
 
       }
@@ -702,6 +812,170 @@ async function loadChainUsers(
 
 
 /* =========================
+   Protocol TVL
+========================= */
+
+async function loadProtocolTvl(
+  protocol
+) {
+
+  const slug =
+    String(
+      protocol?.source_id ||
+      protocol?.id ||
+      ""
+    ).trim();
+
+
+  if (!slug) {
+
+    return;
+
+  }
+
+
+  state.protocolMetrics
+    .tvlLoading = true;
+
+  state.protocolMetrics
+    .tvlError = null;
+
+
+  render();
+
+
+  try {
+
+    const target =
+      "https://api.llama.fi/protocol/" +
+      encodeURIComponent(
+        slug
+      );
+
+
+    console.log(
+      "[protocol-tvl] Request:",
+      target
+    );
+
+
+    const data =
+      await fetchProxy(
+        target
+      );
+
+
+    console.log(
+      "[protocol-tvl] Response:",
+      data
+    );
+
+
+    let value =
+      Number(
+        data?.tvl
+      );
+
+
+    let date =
+      Math.floor(
+        Date.now() / 1000
+      );
+
+
+    if (
+      !Number.isFinite(value) &&
+      Array.isArray(
+        data?.tvl
+      )
+    ) {
+
+      const latest =
+        parseLatestArray(
+          data.tvl,
+          (row) =>
+            row?.totalLiquidityUSD ??
+            row?.tvl ??
+            row?.liquidity
+        );
+
+
+      if (latest) {
+
+        value =
+          latest.value;
+
+        date =
+          latest.date;
+
+      }
+
+    }
+
+
+    if (
+      !Number.isFinite(value)
+    ) {
+
+      throw new Error(
+        "没有找到有效 TVL 数据"
+      );
+
+    }
+
+
+    state.protocolMetrics.tvl =
+      value;
+
+
+    state.protocolMetrics
+      .tvlError = null;
+
+
+    state.protocolMetrics
+      .tvlDate = date;
+
+
+  } catch (error) {
+
+    console.error(
+      "[protocol-tvl] Error:",
+      error
+    );
+
+
+    state.protocolMetrics.tvl =
+      null;
+
+
+    state.protocolMetrics
+      .tvlDate = null;
+
+
+    state.protocolMetrics
+      .tvlError =
+        error?.message ||
+        String(error);
+
+  }
+
+
+  state.protocolMetrics
+    .tvlLoading = false;
+
+
+  if (
+    state.page === "protocol"
+  ) {
+
+    render();
+
+  }
+
+}
+
+
+/* =========================
    Metric Card
 ========================= */
 
@@ -712,6 +986,7 @@ function metricCard(
 ) {
 
   return `
+
     <div class="card">
 
       <b>
@@ -727,6 +1002,7 @@ function metricCard(
       </p>
 
     </div>
+
   `;
 
 }
@@ -749,8 +1025,10 @@ function metricValue(
       key + "Loading"
     ];
 
+
   const value =
     metrics[key];
+
 
   const date =
     metrics[
@@ -766,8 +1044,7 @@ function metricValue(
     displayValue =
       "读取中...";
 
-  }
-  else {
+  } else {
 
     displayValue =
       money
@@ -817,7 +1094,9 @@ function render() {
 
 
   if (!app) {
+
     return;
+
   }
 
 
@@ -865,7 +1144,11 @@ function render() {
 
             ? ecosystemPage()
 
-            : dashboardPage()
+            : state.page === "protocol"
+
+              ? protocolPage()
+
+              : dashboardPage()
       }
 
     </main>
@@ -1043,7 +1326,18 @@ function searchGroup(
 
                   `
 
-                  : ""
+                  : type === "protocol"
+
+                    ? `
+
+                      <div class="search-action">
+                        进入协议 →
+                      </div>
+
+                    `
+
+                    : ""
+
               }
 
             </div>
@@ -1116,7 +1410,7 @@ function searchPage() {
           <input
             id="searchInput"
             class="input"
-            placeholder="例如：Ethereum / Solana / BNB"
+            placeholder="例如：Ethereum / Solana / Uniswap"
             value="${esc(state.query)}"
           >
 
@@ -1205,15 +1499,10 @@ function ecosystemPage() {
   const loadedCount = [
 
     m.tvl,
-
     m.stablecoins,
-
     m.dexVolume,
-
     m.fees,
-
     m.revenue,
-
     m.users
 
   ].filter(
@@ -1615,6 +1904,453 @@ function ecosystemPage() {
 
 
 /* =========================
+   Protocol Page
+========================= */
+
+function protocolPage() {
+
+  const protocol =
+    state.selectedProtocol || {};
+
+
+  const name =
+    protocol.name ||
+    "Unknown";
+
+
+  const symbol =
+    protocol.symbol ||
+    "-";
+
+
+  const category =
+    protocol.category ||
+    protocol.protocol_type ||
+    "NO_DATA";
+
+
+  const chains =
+    Array.isArray(
+      protocol.chains
+    )
+      ? protocol.chains
+      : [];
+
+
+  const tvl =
+    state.protocolMetrics.tvl;
+
+
+  const tvlLoading =
+    state.protocolMetrics
+      .tvlLoading;
+
+
+  let tvlDisplay =
+    "NO_DATA";
+
+
+  if (tvlLoading) {
+
+    tvlDisplay =
+      "读取中...";
+
+  } else {
+
+    tvlDisplay =
+      formatUSD(tvl);
+
+  }
+
+
+  const website =
+    protocol.website ||
+    "";
+
+
+  return `
+
+    <section>
+
+
+      <button
+        id="backSearch"
+        class="button"
+      >
+        ← 返回搜索
+      </button>
+
+
+      <div class="hero">
+
+        <h1>
+          ${esc(name)}
+        </h1>
+
+        <p class="muted">
+          ${esc(name)}
+          ·
+          ${esc(symbol)}
+        </p>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          基本身份
+        </h2>
+
+
+        <div class="data-grid">
+
+
+          <div class="card">
+
+            <b>
+              类型
+            </b>
+
+            <p>
+              Protocol / 协议
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Symbol
+            </b>
+
+            <p>
+              ${esc(symbol)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Category
+            </b>
+
+            <p>
+              ${esc(category)}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              数据来源
+            </b>
+
+            <p>
+              ${esc(
+                protocol.source ||
+                protocol.source_label ||
+                "DeFiLlama"
+              )}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Identity Status
+            </b>
+
+            <p>
+              ${esc(
+                protocol.identity_status ||
+                "PROPOSED"
+              )}
+            </p>
+
+          </div>
+
+
+          <div class="card">
+
+            <b>
+              Source ID
+            </b>
+
+            <p>
+              ${esc(
+                protocol.source_id ||
+                "NO_DATA"
+              )}
+            </p>
+
+          </div>
+
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Protocol Metrics / 协议指标
+        </h2>
+
+
+        <div class="data-grid">
+
+
+          <div class="card">
+
+            <b>
+              TVL
+            </b>
+
+            <h2>
+              ${esc(tvlDisplay)}
+            </h2>
+
+            <p class="muted">
+
+              Total Value Locked
+              · 协议总锁仓价值
+
+              ${
+                state.protocolMetrics
+                  .tvlDate &&
+                Number.isFinite(
+                  Number(tvl)
+                )
+
+                  ? " · 数据时间 " +
+                    formatDate(
+                      state.protocolMetrics
+                        .tvlDate
+                    )
+
+                  : ""
+              }
+
+            </p>
+
+          </div>
+
+
+        </div>
+
+
+        ${
+          state.protocolMetrics
+            .tvlError
+
+            ? `
+
+              <p class="muted">
+
+                TVL 数据读取失败：
+
+                ${esc(
+                  state.protocolMetrics
+                    .tvlError
+                )}
+
+              </p>
+
+            `
+
+            : ""
+        }
+
+
+        <p class="muted">
+
+          数据源：DeFiLlama
+
+          · 页面只显示成功取得的真实数据；
+
+          无法确认时保持 NO_DATA。
+
+        </p>
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Supported Chains / 所属链
+        </h2>
+
+
+        ${
+          chains.length
+
+            ? `
+
+              <div class="search-list">
+
+                ${chains.map(
+                  (chain) => `
+
+                    <div class="card">
+
+                      <b>
+                        ${esc(chain)}
+                      </b>
+
+                    </div>
+
+                  `
+                ).join("")}
+
+              </div>
+
+            `
+
+            : `
+
+              <div class="empty">
+                NO_DATA
+              </div>
+
+            `
+        }
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          Official Website / 官方网站
+        </h2>
+
+
+        ${
+          website
+
+            ? `
+
+              <p>
+
+                <a
+                  href="${esc(website)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  ${esc(website)}
+                </a>
+
+              </p>
+
+            `
+
+            : `
+
+              <div class="empty">
+                NO_DATA
+              </div>
+
+            `
+        }
+
+      </div>
+
+
+      <div class="panel">
+
+        <h2>
+          研究状态
+        </h2>
+
+
+        <div class="status-list">
+
+
+          <div>
+
+            Identity
+
+            <span class="status-ok">
+              ✓ 已识别
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Protocol
+
+            <span class="status-ok">
+              ✓ 已建立
+            </span>
+
+          </div>
+
+
+          <div>
+
+            TVL
+
+            <span
+              class="${
+                Number.isFinite(
+                  Number(tvl)
+                )
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
+
+              ${
+                Number.isFinite(
+                  Number(tvl)
+                )
+
+                  ? "✓ 已取得真实数据"
+
+                  : "NO_DATA"
+              }
+
+            </span>
+
+          </div>
+
+
+          <div>
+
+            Research
+
+            <span class="status-wait">
+              未开始
+            </span>
+
+          </div>
+
+
+        </div>
+
+      </div>
+
+
+    </section>
+
+  `;
+
+}
+
+
+/* =========================
    Bind
 ========================= */
 
@@ -1663,7 +2399,9 @@ function bind() {
 
 
     if (!q) {
+
       return;
+
     }
 
 
@@ -1706,7 +2444,9 @@ function bind() {
     input.onkeydown =
       (e) => {
 
-        if (e.key === "Enter") {
+        if (
+          e.key === "Enter"
+        ) {
 
           doSearch();
 
@@ -1748,23 +2488,72 @@ function bind() {
           state.search[index];
 
 
+        if (!x) {
+
+          return;
+
+        }
+
+
+        /* =====================
+           Protocol
+        ===================== */
+
         if (
-          type !== "chain"
+          type === "protocol"
+        ) {
+
+          state.selectedProtocol =
+            x;
+
+
+          resetProtocolMetrics();
+
+
+          state.protocolMetrics
+            .tvlLoading = true;
+
+
+          state.page =
+            "protocol";
+
+
+          location.hash =
+            "protocol";
+
+
+          render();
+
+
+          loadProtocolTvl(x);
+
+
+          return;
+
+        }
+
+
+        /* =====================
+           Token
+        ===================== */
+
+        if (
+          type === "token"
         ) {
 
           alert(
 
             `${x?.name || "Unknown"}\n\n` +
 
-            `类型：${
-              x?.object_type || "-"
-            }\n` +
+            `类型：代币\n` +
 
             `来源：${
               x?.source ||
               x?.source_label ||
               "-"
-            }`
+            }\n\n` +
+
+            `Token 页面将在下一阶段接入。`
 
           );
 
@@ -1772,6 +2561,10 @@ function bind() {
 
         }
 
+
+        /* =====================
+           Chain
+        ===================== */
 
         state.selectedChain =
           x;
