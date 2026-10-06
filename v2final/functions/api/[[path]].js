@@ -332,6 +332,7 @@ async function seed(db) {
       name: 'Solana',
       symbol: 'SOL',
       chain: 'Solana',
+      chain_id: chain.id,
       ecosystem_id: ecosystem.id,
       website: 'https://solana.com',
       identity_status: 'CONFIRMED',
@@ -344,6 +345,7 @@ async function seed(db) {
       name: 'Jito',
       symbol: 'JTO',
       chain: 'Solana',
+      chain_id: chain.id,
       ecosystem_id: ecosystem.id,
       website: 'https://www.jito.network',
       identity_status: 'CONFIRMED',
@@ -356,6 +358,7 @@ async function seed(db) {
       name: 'Jupiter',
       symbol: 'JUP',
       chain: 'Solana',
+      chain_id: chain.id,
       ecosystem_id: ecosystem.id,
       website: 'https://jup.ag',
       identity_status: 'CONFIRMED',
@@ -368,6 +371,7 @@ async function seed(db) {
       name: 'Raydium',
       symbol: 'RAY',
       chain: 'Solana',
+      chain_id: chain.id,
       ecosystem_id: ecosystem.id,
       website: 'https://raydium.io',
       identity_status: 'CONFIRMED',
@@ -380,6 +384,7 @@ async function seed(db) {
       name: 'Sanctum',
       symbol: 'CLOUD',
       chain: 'Solana',
+      chain_id: chain.id,
       ecosystem_id: ecosystem.id,
       website: 'https://www.sanctum.so',
       identity_status: 'CONFIRMED',
@@ -399,7 +404,6 @@ async function seed(db) {
       ecosystem_id: ecosystem.id,
       chain_id: chain.id,
       website: 'https://www.jito.network',
-      token_id: 'token:solana:jto',
       status: 'ACTIVE',
       created_at: now,
       updated_at: now
@@ -413,7 +417,6 @@ async function seed(db) {
       ecosystem_id: ecosystem.id,
       chain_id: chain.id,
       website: 'https://jup.ag',
-      token_id: 'token:solana:jup',
       status: 'ACTIVE',
       created_at: now,
       updated_at: now
@@ -427,7 +430,6 @@ async function seed(db) {
       ecosystem_id: ecosystem.id,
       chain_id: chain.id,
       website: 'https://raydium.io',
-      token_id: 'token:solana:ray',
       status: 'ACTIVE',
       created_at: now,
       updated_at: now
@@ -441,7 +443,6 @@ async function seed(db) {
       ecosystem_id: ecosystem.id,
       chain_id: chain.id,
       website: 'https://www.sanctum.so',
-      token_id: 'token:solana:cloud',
       status: 'ACTIVE',
       created_at: now,
       updated_at: now
@@ -453,33 +454,29 @@ async function seed(db) {
       id: 'protocol-token:jito:jto',
       protocol_id: 'protocol:solana:jito',
       token_id: 'token:solana:jto',
-      relationship: 'associated_token',
-      created_at: now,
-      updated_at: now
+      relation_type: 'associated_token',
+      created_at: now
     },
     {
       id: 'protocol-token:jupiter:jup',
       protocol_id: 'protocol:solana:jupiter',
       token_id: 'token:solana:jup',
-      relationship: 'associated_token',
-      created_at: now,
-      updated_at: now
+      relation_type: 'associated_token',
+      created_at: now
     },
     {
       id: 'protocol-token:raydium:ray',
       protocol_id: 'protocol:solana:raydium',
       token_id: 'token:solana:ray',
-      relationship: 'associated_token',
-      created_at: now,
-      updated_at: now
+      relation_type: 'associated_token',
+      created_at: now
     },
     {
       id: 'protocol-token:sanctum:cloud',
       protocol_id: 'protocol:solana:sanctum',
       token_id: 'token:solana:cloud',
-      relationship: 'associated_token',
-      created_at: now,
-      updated_at: now
+      relation_type: 'associated_token',
+      created_at: now
     }
   ];
 
@@ -506,46 +503,20 @@ async function seed(db) {
     } catch {}
   }
 
-  await trySeed(
-    'ecosystems',
-    ecosystem,
-    'ecosystems'
-  );
-
-  await trySeed(
-    'sources',
-    source,
-    'sources'
-  );
-
-  await trySeed(
-    'chains',
-    chain,
-    'chains'
-  );
+  await trySeed('ecosystems', ecosystem, 'ecosystems');
+  await trySeed('sources', source, 'sources');
+  await trySeed('chains', chain, 'chains');
 
   for (const token of tokens) {
-    await trySeed(
-      'tokens',
-      token,
-      'tokens'
-    );
+    await trySeed('tokens', token, 'tokens');
   }
 
   for (const protocol of protocols) {
-    await trySeed(
-      'protocols',
-      protocol,
-      'protocols'
-    );
+    await trySeed('protocols', protocol, 'protocols');
   }
 
   for (const pt of protocolTokens) {
-    await trySeed(
-      'protocol_tokens',
-      pt,
-      'protocol_tokens'
-    );
+    await trySeed('protocol_tokens', pt, 'protocol_tokens');
   }
 
   return {
@@ -555,7 +526,7 @@ async function seed(db) {
 }
 
 /* =========================================================
-   SEARCH
+   SEARCH HELPERS
 ========================================================= */
 
 function normalizeSearchText(value) {
@@ -566,11 +537,9 @@ function normalizeSearchText(value) {
 }
 
 function aliasesForQuery(q) {
-  const normalized =
-    normalizeSearchText(q);
+  const normalized = normalizeSearchText(q);
 
-  const aliases =
-    new Set([q]);
+  const aliases = new Set([q]);
 
   const map = {
     '以太坊': ['Ethereum', 'ETH'],
@@ -582,217 +551,63 @@ function aliasesForQuery(q) {
     'bitcoin': ['比特币', 'BTC'],
     'btc': ['Bitcoin', '比特币'],
 
-    '币安': [
-      'BNB',
-      'BNB Chain',
-      'Binance'
-    ],
+    '币安': ['BNB', 'BNB Chain', 'Binance'],
+    '币安币': ['BNB', 'Binance Coin'],
+    'bnb': ['BNB', 'Binance Coin', 'BNB Chain'],
+    'binance': ['BNB', 'Binance Coin', 'BNB Chain'],
 
-    '币安币': [
-      'BNB',
-      'Binance Coin'
-    ],
+    '索拉纳': ['Solana', 'SOL'],
+    'solana': ['索拉纳', 'SOL'],
+    'sol': ['Solana', '索拉纳'],
 
-    'bnb': [
-      'BNB',
-      'Binance Coin',
-      'BNB Chain'
-    ],
+    '雪崩': ['Avalanche', 'AVAX'],
+    'avalanche': ['雪崩', 'AVAX'],
+    'avax': ['Avalanche', '雪崩'],
 
-    'binance': [
-      'BNB',
-      'Binance Coin',
-      'BNB Chain'
-    ],
+    '狗狗币': ['Dogecoin', 'DOGE'],
+    'dogecoin': ['狗狗币', 'DOGE'],
+    'doge': ['Dogecoin', '狗狗币'],
 
-    '索拉纳': [
-      'Solana',
-      'SOL'
-    ],
+    '瑞波': ['XRP', 'XRP Ledger'],
+    'ripple': ['XRP', 'XRP Ledger'],
+    'xrp': ['Ripple', 'XRP Ledger'],
 
-    'solana': [
-      '索拉纳',
-      'SOL'
-    ],
+    '波卡': ['Polkadot', 'DOT'],
+    'polkadot': ['波卡', 'DOT'],
+    'dot': ['Polkadot', '波卡'],
 
-    'sol': [
-      'Solana',
-      '索拉纳'
-    ],
+    '卡尔达诺': ['Cardano', 'ADA'],
+    'cardano': ['卡尔达诺', 'ADA'],
+    'ada': ['Cardano', '卡尔达诺'],
 
-    '雪崩': [
-      'Avalanche',
-      'AVAX'
-    ],
+    '阿比特拉姆': ['Arbitrum', 'ARB'],
+    'arbitrum': ['阿比特拉姆', 'ARB'],
+    'arb': ['Arbitrum', '阿比特拉姆'],
 
-    'avalanche': [
-      '雪崩',
-      'AVAX'
-    ],
+    'polygon': ['Polygon', 'POL', 'MATIC'],
+    'matic': ['Polygon', 'POL', 'MATIC'],
+    'pol': ['Polygon', 'POL', 'MATIC'],
 
-    'avax': [
-      'Avalanche',
-      '雪崩'
-    ],
+    'base': ['Base', 'ETH'],
 
-    '狗狗币': [
-      'Dogecoin',
-      'DOGE'
-    ],
+    'optimism': ['OP Mainnet', 'OP'],
+    'op': ['OP Mainnet', 'Optimism'],
 
-    'dogecoin': [
-      '狗狗币',
-      'DOGE'
-    ],
+    'sui': ['Sui', 'SUI'],
+    'aptos': ['Aptos', 'APT'],
+    'apt': ['Aptos', 'APT'],
 
-    'doge': [
-      'Dogecoin',
-      '狗狗币'
-    ],
+    'near': ['NEAR', 'NEAR Protocol'],
+    'near protocol': ['NEAR', 'NEAR Protocol'],
 
-    '瑞波': [
-      'XRP',
-      'XRP Ledger'
-    ],
+    'cosmos': ['Cosmos', 'ATOM'],
+    'atom': ['Cosmos', 'ATOM'],
 
-    'ripple': [
-      'XRP',
-      'XRP Ledger'
-    ],
-
-    'xrp': [
-      'Ripple',
-      'XRP Ledger'
-    ],
-
-    '波卡': [
-      'Polkadot',
-      'DOT'
-    ],
-
-    'polkadot': [
-      '波卡',
-      'DOT'
-    ],
-
-    'dot': [
-      'Polkadot',
-      '波卡'
-    ],
-
-    '卡尔达诺': [
-      'Cardano',
-      'ADA'
-    ],
-
-    'cardano': [
-      '卡尔达诺',
-      'ADA'
-    ],
-
-    'ada': [
-      'Cardano',
-      '卡尔达诺'
-    ],
-
-    '阿比特拉姆': [
-      'Arbitrum',
-      'ARB'
-    ],
-
-    'arbitrum': [
-      '阿比特拉姆',
-      'ARB'
-    ],
-
-    'arb': [
-      'Arbitrum',
-      '阿比特拉姆'
-    ],
-
-    'polygon': [
-      'Polygon',
-      'POL',
-      'MATIC'
-    ],
-
-    'matic': [
-      'Polygon',
-      'POL',
-      'MATIC'
-    ],
-
-    'pol': [
-      'Polygon',
-      'POL',
-      'MATIC'
-    ],
-
-    'base': [
-      'Base',
-      'ETH'
-    ],
-
-    'optimism': [
-      'OP Mainnet',
-      'OP'
-    ],
-
-    'op': [
-      'OP Mainnet',
-      'Optimism'
-    ],
-
-    'sui': [
-      'Sui',
-      'SUI'
-    ],
-
-    'aptos': [
-      'Aptos',
-      'APT'
-    ],
-
-    'apt': [
-      'Aptos',
-      'APT'
-    ],
-
-    'near': [
-      'NEAR',
-      'NEAR Protocol'
-    ],
-
-    'near protocol': [
-      'NEAR',
-      'NEAR Protocol'
-    ],
-
-    'cosmos': [
-      'Cosmos',
-      'ATOM'
-    ],
-
-    'atom': [
-      'Cosmos',
-      'ATOM'
-    ],
-
-    'tron': [
-      'TRON',
-      'TRX'
-    ],
-
-    'trx': [
-      'TRON',
-      'TRX'
-    ]
+    'tron': ['TRON', 'TRX'],
+    'trx': ['TRON', 'TRX']
   };
 
-  const list =
-    map[normalized] || [];
-
-  for (const x of list) {
+  for (const x of map[normalized] || []) {
     aliases.add(x);
   }
 
@@ -800,69 +615,214 @@ function aliasesForQuery(q) {
 }
 
 function rankLocalResult(item, q) {
-  const query =
-    normalizeSearchText(q);
-
-  const name =
-    normalizeSearchText(
-      item.name
-    );
-
-  const symbol =
-    normalizeSearchText(
-      item.symbol
-    );
-
-  const chain =
-    normalizeSearchText(
-      item.chain
-    );
-
-  const contract =
-    normalizeSearchText(
-      item.contract_address ||
-      item.address ||
-      item.token_address
-    );
-
-  const idValue =
-    normalizeSearchText(
-      item.id
-    );
-
-  const cg =
-    normalizeSearchText(
-      item.coingecko_id ||
-      item.coin_id ||
-      item.coingecko
-    );
+  const query = normalizeSearchText(q);
+  const name = normalizeSearchText(item.name);
+  const symbol = normalizeSearchText(item.symbol);
+  const chain = normalizeSearchText(item.chain);
+  const contract = normalizeSearchText(
+    item.contract_address ||
+    item.address ||
+    item.token_address
+  );
+  const idValue = normalizeSearchText(item.id);
+  const cg = normalizeSearchText(
+    item.coingecko_id ||
+    item.coin_id ||
+    item.coingecko
+  );
 
   if (chain === query) return 1;
-
-  if (
-    contract &&
-    contract === query
-  ) {
-    return 2;
-  }
-
+  if (contract && contract === query) return 2;
   if (symbol === query) return 3;
-
   if (name === query) return 4;
-
   if (name.startsWith(query)) return 5;
-
   if (symbol.startsWith(query)) return 6;
-
   if (idValue.includes(query)) return 7;
-
   if (cg.includes(query)) return 8;
-
   if (name.includes(query)) return 9;
-
   if (symbol.includes(query)) return 10;
 
   return 99;
+}
+
+/* =========================================================
+   TOKEN IDENTITY
+========================================================= */
+
+function tokenIdentityFromRow(token, identifiers = []) {
+  if (!token) {
+    return null;
+  }
+
+  const ids = identifiers.filter(
+    x => x && x.token_id === token.id
+  );
+
+  const coingecko =
+    ids.find(
+      x =>
+        String(x.provider || '').toLowerCase() ===
+        'coingecko'
+    ) ||
+    ids.find(
+      x =>
+        String(x.identifier_type || '').toLowerCase()
+          .includes('coingecko')
+    );
+
+  return {
+    id: token.id || null,
+    name: token.name || null,
+    symbol: token.symbol || null,
+    chain_id: token.chain_id || null,
+    contract_address: token.contract_address || null,
+    token_standard: token.token_standard || null,
+    decimals: token.decimals ?? null,
+    is_native: token.is_native ?? null,
+    representation_type:
+      token.representation_type || null,
+    canonical_token_id:
+      token.canonical_token_id || null,
+    identity_status:
+      token.identity_status || 'UNVERIFIED',
+
+    coingecko_id:
+      coingecko?.external_id || null
+  };
+}
+
+/* =========================================================
+   PROTOCOL ASSOCIATED TOKENS
+========================================================= */
+
+async function getProtocolAssociatedTokens(
+  db,
+  protocolId
+) {
+  if (!protocolId) {
+    return [];
+  }
+
+  try {
+    const rows =
+      await db
+        .prepare(`
+          SELECT
+            pt.id AS relation_id,
+            pt.protocol_id,
+            pt.token_id,
+            pt.relation_type,
+            t.*
+          FROM protocol_tokens pt
+          LEFT JOIN tokens t
+            ON t.id = pt.token_id
+          WHERE pt.protocol_id = ?
+          ORDER BY pt.created_at ASC
+        `)
+        .bind(protocolId)
+        .all();
+
+    const tokenRows =
+      rows.results || [];
+
+    if (!tokenRows.length) {
+      return [];
+    }
+
+    const tokenIds = [
+      ...new Set(
+        tokenRows
+          .map(x => x.token_id)
+          .filter(Boolean)
+      )
+    ];
+
+    let identifiers = [];
+
+    if (tokenIds.length) {
+      const placeholders =
+        tokenIds.map(() => '?').join(',');
+
+      try {
+        const r =
+          await db
+            .prepare(`
+              SELECT *
+              FROM token_identifiers
+              WHERE token_id IN (${placeholders})
+            `)
+            .bind(...tokenIds)
+            .all();
+
+        identifiers =
+          r.results || [];
+      } catch {}
+    }
+
+    return tokenRows.map(row => ({
+      relation_id:
+        row.relation_id || null,
+
+      protocol_id:
+        row.protocol_id || null,
+
+      token_id:
+        row.token_id || null,
+
+      relation_type:
+        row.relation_type || null,
+
+      token:
+        tokenIdentityFromRow(
+          row,
+          identifiers
+        )
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function getProtocolById(
+  db,
+  protocolId
+) {
+  const protocol =
+    await one(
+      db,
+      'protocols',
+      protocolId
+    );
+
+  if (!protocol) {
+    return null;
+  }
+
+  const associatedTokens =
+    await getProtocolAssociatedTokens(
+      db,
+      protocolId
+    );
+
+  return {
+    ...protocol,
+
+    object_type:
+      'protocol',
+
+    source:
+      'D1',
+
+    is_external:
+      false,
+
+    identity_status:
+      protocol.identity_status ||
+      'CONFIRMED',
+
+    associated_tokens:
+      associatedTokens
+  };
 }
 
 /* =========================================================
@@ -870,15 +830,12 @@ function rankLocalResult(item, q) {
 ========================================================= */
 
 async function searchLocal(db, q) {
-  const like =
-    `%${q}%`;
-
+  const like = `%${q}%`;
   const output = [];
 
   const queries = [
     {
       table: 'ecosystems',
-
       sql: `
         SELECT
           id,
@@ -896,7 +853,6 @@ async function searchLocal(db, q) {
 
     {
       table: 'chains',
-
       sql: `
         SELECT
           id,
@@ -916,7 +872,6 @@ async function searchLocal(db, q) {
 
     {
       table: 'protocols',
-
       sql: `
         SELECT
           id,
@@ -936,13 +891,20 @@ async function searchLocal(db, q) {
 
     {
       table: 'tokens',
-
       sql: `
         SELECT
           id,
           name,
           symbol,
-          website
+          website,
+          chain_id,
+          contract_address,
+          token_standard,
+          decimals,
+          is_native,
+          representation_type,
+          canonical_token_id,
+          identity_status
         FROM tokens
         WHERE
           name LIKE ? OR
@@ -957,35 +919,20 @@ async function searchLocal(db, q) {
     try {
       let stmt;
 
-      if (
-        qx.table === 'chains'
-      ) {
+      if (qx.table === 'chains') {
         stmt = db
           .prepare(qx.sql)
-          .bind(
-            like,
-            like,
-            like,
-            like
-          );
+          .bind(like, like, like, like);
       } else {
         stmt = db
           .prepare(qx.sql)
-          .bind(
-            like,
-            like,
-            like
-          );
+          .bind(like, like, like);
       }
 
-      const r =
-        await stmt.all();
+      const r = await stmt.all();
 
-      for (
-        const row of
-        r.results || []
-      ) {
-        output.push({
+      for (const row of r.results || []) {
+        const base = {
           ...row,
 
           object_type:
@@ -998,12 +945,25 @@ async function searchLocal(db, q) {
                   : 'token',
 
           source: 'D1',
-
           is_external: false,
-
           identity_status:
+            row.identity_status ||
             'CONFIRMED'
-        });
+        };
+
+        /*
+         * Protocol 的关联 Token 单独读取。
+         * 不通过协议名称猜 Token。
+         */
+        if (qx.table === 'protocols') {
+          base.associated_tokens =
+            await getProtocolAssociatedTokens(
+              db,
+              row.id
+            );
+        }
+
+        output.push(base);
       }
     } catch {}
   }
@@ -1021,20 +981,14 @@ async function getDefiLlamaChains() {
 
   try {
     const response =
-      await fetch(
-        url,
-        {
-          method: 'GET',
-
-          headers: {
-            'accept':
-              'application/json',
-
-            'user-agent':
-              'crypto-ecosystem-research/2.0'
-          }
+      await fetch(url, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          'user-agent':
+            'crypto-ecosystem-research/2.0'
         }
-      );
+      });
 
     if (!response.ok) {
       return [];
@@ -1043,29 +997,20 @@ async function getDefiLlamaChains() {
     const data =
       await response.json();
 
-    if (
-      !Array.isArray(data)
-    ) {
-      return [];
-    }
-
-    return data;
+    return Array.isArray(data)
+      ? data
+      : [];
   } catch {
     return [];
   }
 }
 
-function rankDefiLlamaChain(
-  chain,
-  q
-) {
+function rankDefiLlamaChain(chain, q) {
   const query =
     normalizeSearchText(q);
 
   const name =
-    normalizeSearchText(
-      chain.name
-    );
+    normalizeSearchText(chain.name);
 
   const symbol =
     normalizeSearchText(
@@ -1083,65 +1028,15 @@ function rankDefiLlamaChain(
       chain.gecko_id
     );
 
-  if (
-    name === query
-  ) {
-    return 1;
-  }
-
-  if (
-    symbol &&
-    symbol === query
-  ) {
-    return 2;
-  }
-
-  if (
-    chainId &&
-    chainId === query
-  ) {
-    return 3;
-  }
-
-  if (
-    gecko &&
-    gecko === query
-  ) {
-    return 4;
-  }
-
-  if (
-    name.startsWith(query)
-  ) {
-    return 5;
-  }
-
-  if (
-    symbol &&
-    symbol.startsWith(query)
-  ) {
-    return 6;
-  }
-
-  if (
-    name.includes(query)
-  ) {
-    return 7;
-  }
-
-  if (
-    symbol &&
-    symbol.includes(query)
-  ) {
-    return 8;
-  }
-
-  if (
-    gecko &&
-    gecko.includes(query)
-  ) {
-    return 9;
-  }
+  if (name === query) return 1;
+  if (symbol && symbol === query) return 2;
+  if (chainId && chainId === query) return 3;
+  if (gecko && gecko === query) return 4;
+  if (name.startsWith(query)) return 5;
+  if (symbol && symbol.startsWith(query)) return 6;
+  if (name.includes(query)) return 7;
+  if (symbol && symbol.includes(query)) return 8;
+  if (gecko && gecko.includes(query)) return 9;
 
   return 99;
 }
@@ -1159,54 +1054,34 @@ async function searchDefiLlamaChains(q) {
 
   const candidates = [];
 
-  for (
-    const query of aliases
-  ) {
-    const normalized =
-      normalizeSearchText(
-        query
-      );
-
-    if (!normalized) {
+  for (const query of aliases) {
+    if (!normalizeSearchText(query)) {
       continue;
     }
 
-    for (
-      const chain of chains
-    ) {
+    for (const chain of chains) {
       const rank =
         rankDefiLlamaChain(
           chain,
           query
         );
 
-      if (
-        rank >= 99
-      ) {
+      if (rank >= 99) {
         continue;
       }
 
       const safeName =
-        String(
-          chain.name || ''
-        )
+        String(chain.name || '')
           .toLowerCase()
-          .replace(
-            /[^a-z0-9]+/g,
-            '-'
-          )
-          .replace(
-            /^-|-$/g,
-            ''
-          );
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
 
       candidates.push({
         id:
           `external:defillama:chain:${safeName}`,
 
         name:
-          chain.name ||
-          null,
+          chain.name || null,
 
         symbol:
           chain.tokenSymbol ||
@@ -1214,20 +1089,16 @@ async function searchDefiLlamaChains(q) {
           null,
 
         chain:
-          chain.name ||
-          null,
+          chain.name || null,
 
         chain_id:
-          chain.chainId ??
-          null,
+          chain.chainId ?? null,
 
         gecko_id:
-          chain.gecko_id ||
-          null,
+          chain.gecko_id || null,
 
         tvl:
-          chain.tvl ??
-          null,
+          chain.tvl ?? null,
 
         object_type:
           'chain',
@@ -1236,8 +1107,7 @@ async function searchDefiLlamaChains(q) {
           'DeFiLlama',
 
         source_id:
-          chain.name ||
-          null,
+          chain.name || null,
 
         source_label:
           'DeFiLlama',
@@ -1261,13 +1131,9 @@ async function searchDefiLlamaChains(q) {
   }
 
   const unique = [];
+  const seen = new Set();
 
-  const seen =
-    new Set();
-
-  for (
-    const item of candidates
-  ) {
+  for (const item of candidates) {
     const key =
       String(
         item.source_id ||
@@ -1275,58 +1141,221 @@ async function searchDefiLlamaChains(q) {
         ''
       ).toLowerCase();
 
-    if (
-      !key ||
-      seen.has(key)
-    ) {
+    if (!key || seen.has(key)) {
       continue;
     }
 
     seen.add(key);
-
     unique.push(item);
   }
 
-  unique.sort(
-    (a, b) => {
-      if (
-        a._rank !==
-        b._rank
-      ) {
-        return (
-          a._rank -
-          b._rank
-        );
-      }
-
-      return String(
-        a.name || ''
-      ).localeCompare(
-        String(
-          b.name || ''
-        )
-      );
+  unique.sort((a, b) => {
+    if (a._rank !== b._rank) {
+      return a._rank - b._rank;
     }
-  );
+
+    return String(a.name || '')
+      .localeCompare(
+        String(b.name || '')
+      );
+  });
 
   return unique
     .slice(0, 40)
-    .map(
-      ({
-        _rank,
-        ...item
-      }) => item
+    .map(({ _rank, ...item }) => item);
+}
+
+/* =========================================================
+   DEFILLAMA PROTOCOL DETAIL
+========================================================= */
+
+async function getDefiLlamaProtocolDetail(sourceId) {
+  if (!sourceId) {
+    return null;
+  }
+
+  const url =
+    'https://api.llama.fi/protocol/' +
+    encodeURIComponent(sourceId);
+
+  try {
+    const response =
+      await fetch(url, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          'user-agent':
+            'crypto-ecosystem-research/2.0'
+        }
+      });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data =
+      await response.json();
+
+    return data &&
+      typeof data === 'object'
+      ? data
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * 只接受外部来源明确给出的 Token 标识。
+ *
+ * 不根据:
+ *   Protocol name -> Token symbol
+ *
+ * 做猜测。
+ */
+function extractExplicitExternalToken(detail) {
+  if (!detail || typeof detail !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    detail.token,
+    detail.token_id,
+    detail.tokenId,
+    detail.gecko_id,
+    detail.coingecko_id,
+    detail.coin_id,
+    detail.governance_token,
+    detail.governanceToken
+  ];
+
+  for (const value of candidates) {
+    if (!value) {
+      continue;
+    }
+
+    if (typeof value === 'object') {
+      const id =
+        value.coingecko_id ||
+        value.coin_id ||
+        value.gecko_id ||
+        value.id;
+
+      if (id) {
+        return {
+          coingecko_id: String(id)
+        };
+      }
+
+      continue;
+    }
+
+    return {
+      coingecko_id: String(value)
+    };
+  }
+
+  return null;
+}
+
+async function enrichExternalProtocolToken(
+  protocol
+) {
+  if (!protocol?.source_id) {
+    return protocol;
+  }
+
+  const detail =
+    await getDefiLlamaProtocolDetail(
+      protocol.source_id
     );
+
+  if (!detail) {
+    return {
+      ...protocol,
+      associated_tokens: [],
+      token_status: 'NO_DATA'
+    };
+  }
+
+  const explicit =
+    extractExplicitExternalToken(
+      detail
+    );
+
+  if (!explicit?.coingecko_id) {
+    return {
+      ...protocol,
+      associated_tokens: [],
+      token_status: 'NO_DATA'
+    };
+  }
+
+  const coin =
+    await coinGeckoCoin(
+      explicit.coingecko_id
+    );
+
+  if (!coin) {
+    return {
+      ...protocol,
+
+      associated_tokens: [{
+        relation_type:
+          'associated_token',
+
+        token: {
+          coingecko_id:
+            explicit.coingecko_id,
+
+          identity_status:
+            'PROPOSED'
+        }
+      }],
+
+      token_status:
+        'IDENTITY_ONLY'
+    };
+  }
+
+  return {
+    ...protocol,
+
+    associated_tokens: [{
+      relation_type:
+        'associated_token',
+
+      token: {
+        id:
+          coin.id,
+
+        name:
+          coin.name,
+
+        symbol:
+          coin.symbol,
+
+        coingecko_id:
+          coin.coingecko_id,
+
+        identity_status:
+          'PROPOSED',
+
+        market_data:
+          coin.market_data || null
+      }
+    }],
+
+    token_status:
+      'MARKET_DATA_AVAILABLE'
+  };
 }
 
 /* =========================================================
    DEFILLAMA PROTOCOL SEARCH
 ========================================================= */
 
-function rankDefiLlamaProtocol(
-  protocol,
-  q
-) {
+function rankDefiLlamaProtocol(protocol, q) {
   const query =
     normalizeSearchText(q);
 
@@ -1346,41 +1375,15 @@ function rankDefiLlamaProtocol(
       protocol?.id
     );
 
-  if (name === query) {
-    return 1;
-  }
-
-  if (slug === query) {
-    return 2;
-  }
-
-  if (symbol === query) {
-    return 3;
-  }
-
-  if (name.startsWith(query)) {
-    return 4;
-  }
-
-  if (slug.startsWith(query)) {
-    return 5;
-  }
-
-  if (symbol.startsWith(query)) {
-    return 6;
-  }
-
-  if (name.includes(query)) {
-    return 7;
-  }
-
-  if (slug.includes(query)) {
-    return 8;
-  }
-
-  if (symbol.includes(query)) {
-    return 9;
-  }
+  if (name === query) return 1;
+  if (slug === query) return 2;
+  if (symbol === query) return 3;
+  if (name.startsWith(query)) return 4;
+  if (slug.startsWith(query)) return 5;
+  if (symbol.startsWith(query)) return 6;
+  if (name.includes(query)) return 7;
+  if (slug.includes(query)) return 8;
+  if (symbol.includes(query)) return 9;
 
   return 99;
 }
@@ -1391,25 +1394,17 @@ async function getDefiLlamaProtocols() {
     'https://api.llama.fi/v2/protocols'
   ];
 
-  for (
-    const url of urls
-  ) {
+  for (const url of urls) {
     try {
       const response =
-        await fetch(
-          url,
-          {
-            method: 'GET',
-
-            headers: {
-              'accept':
-                'application/json',
-
-              'user-agent':
-                'crypto-ecosystem-research/2.0'
-            }
+        await fetch(url, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            'user-agent':
+              'crypto-ecosystem-research/2.0'
           }
-        );
+        });
 
       if (!response.ok) {
         continue;
@@ -1418,20 +1413,13 @@ async function getDefiLlamaProtocols() {
       const data =
         await response.json();
 
-      if (
-        Array.isArray(data)
-      ) {
+      if (Array.isArray(data)) {
         return data;
       }
 
-      if (
-        Array.isArray(
-          data?.protocols
-        )
-      ) {
+      if (Array.isArray(data?.protocols)) {
         return data.protocols;
       }
-
     } catch {}
   }
 
@@ -1458,30 +1446,19 @@ async function searchDefiLlamaProtocols(q) {
 
   const candidates = [];
 
-  for (
-    const alias of aliases
-  ) {
-    const normalized =
-      normalizeSearchText(
-        alias
-      );
-
-    if (!normalized) {
+  for (const alias of aliases) {
+    if (!normalizeSearchText(alias)) {
       continue;
     }
 
-    for (
-      const protocol of protocols
-    ) {
+    for (const protocol of protocols) {
       const rank =
         rankDefiLlamaProtocol(
           protocol,
           alias
         );
 
-      if (
-        rank >= 99
-      ) {
+      if (rank >= 99) {
         continue;
       }
 
@@ -1495,12 +1472,10 @@ async function searchDefiLlamaProtocols(q) {
           ),
 
         name:
-          protocol?.name ||
-          null,
+          protocol?.name || null,
 
         symbol:
-          protocol?.symbol ||
-          null,
+          protocol?.symbol || null,
 
         object_type:
           'protocol',
@@ -1528,45 +1503,32 @@ async function searchDefiLlamaProtocols(q) {
           null,
 
         chains:
-          Array.isArray(
-            protocol?.chains
-          )
+          Array.isArray(protocol?.chains)
             ? protocol.chains
             : [],
 
         tvl:
           Number.isFinite(
-            Number(
-              protocol?.tvl
-            )
+            Number(protocol?.tvl)
           )
-            ? Number(
-                protocol.tvl
-              )
+            ? Number(protocol.tvl)
             : null,
 
         mcap:
           Number.isFinite(
-            Number(
-              protocol?.mcap
-            )
+            Number(protocol?.mcap)
           )
-            ? Number(
-                protocol.mcap
-              )
+            ? Number(protocol.mcap)
             : null,
 
         change_1h:
-          protocol?.change_1h ??
-          null,
+          protocol?.change_1h ?? null,
 
         change_1d:
-          protocol?.change_1d ??
-          null,
+          protocol?.change_1d ?? null,
 
         change_7d:
-          protocol?.change_7d ??
-          null,
+          protocol?.change_7d ?? null,
 
         website:
           protocol?.url ||
@@ -1574,8 +1536,7 @@ async function searchDefiLlamaProtocols(q) {
           null,
 
         logo:
-          protocol?.logo ||
-          null,
+          protocol?.logo || null,
 
         identity_status:
           'PROPOSED',
@@ -1592,36 +1553,21 @@ async function searchDefiLlamaProtocols(q) {
     }
   }
 
-  candidates.sort(
-    (a, b) => {
-      if (
-        a._rank !==
-        b._rank
-      ) {
-        return (
-          a._rank -
-          b._rank
-        );
-      }
-
-      return String(
-        a.name || ''
-      ).localeCompare(
-        String(
-          b.name || ''
-        )
-      );
+  candidates.sort((a, b) => {
+    if (a._rank !== b._rank) {
+      return a._rank - b._rank;
     }
-  );
+
+    return String(a.name || '')
+      .localeCompare(
+        String(b.name || '')
+      );
+  });
 
   const unique = [];
+  const seen = new Set();
 
-  const seen =
-    new Set();
-
-  for (
-    const item of candidates
-  ) {
+  for (const item of candidates) {
     const key =
       String(
         item.source_id ||
@@ -1629,26 +1575,47 @@ async function searchDefiLlamaProtocols(q) {
         ''
       ).toLowerCase();
 
-    if (
-      !key ||
-      seen.has(key)
-    ) {
+    if (!key || seen.has(key)) {
       continue;
     }
 
     seen.add(key);
-
     unique.push(item);
   }
 
-  return unique
-    .slice(0, 20)
-    .map(
-      ({
-        _rank,
-        ...item
-      }) => item
-    );
+  /*
+   * 只对前面的少量高相关 Protocol
+   * 尝试读取明确 Token 信息。
+   */
+  const top =
+    unique.slice(0, 20);
+
+  const enriched = [];
+
+  for (const item of top) {
+    try {
+      enriched.push(
+        await enrichExternalProtocolToken(
+          item
+        )
+      );
+    } catch {
+      enriched.push({
+        ...item,
+        associated_tokens: [],
+        token_status: 'NO_DATA'
+      });
+    }
+  }
+
+  return enriched.map(item => {
+    const {
+      _rank,
+      ...clean
+    } = item;
+
+    return clean;
+  });
 }
 
 /* =========================================================
@@ -1661,55 +1628,39 @@ async function searchCoinGecko(q) {
 
   const results = [];
 
-  for (
-    const query of
-    aliases.slice(0, 4)
-  ) {
+  for (const query of aliases.slice(0, 4)) {
     try {
       const url =
         'https://api.coingecko.com/api/v3/search?query=' +
         encodeURIComponent(query);
 
       const response =
-        await fetch(
-          url,
-          {
-            method: 'GET',
-
-            headers: {
-              'accept':
-                'application/json',
-
-              'user-agent':
-                'crypto-ecosystem-research/2.0'
-            }
+        await fetch(url, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            'user-agent':
+              'crypto-ecosystem-research/2.0'
           }
-        );
+        });
 
-      if (
-        !response.ok
-      ) {
+      if (!response.ok) {
         continue;
       }
 
       const data =
         await response.json();
 
-      for (
-        const coin of
-        data?.coins || []
-      ) {
+      for (const coin of data?.coins || []) {
         results.push({
           id:
             `external:coingecko:${coin.id}`,
 
           name:
-            coin.name ||
-            null,
+            coin.name || null,
 
           symbol:
-            coin.symbol ||
-            null,
+            coin.symbol || null,
 
           image:
             coin.large ||
@@ -1717,8 +1668,7 @@ async function searchCoinGecko(q) {
             null,
 
           market_cap_rank:
-            coin.market_cap_rank ??
-            null,
+            coin.market_cap_rank ?? null,
 
           object_type:
             'token',
@@ -1749,32 +1699,20 @@ async function searchCoinGecko(q) {
   }
 
   const unique = [];
+  const seen = new Set();
 
-  const seen =
-    new Set();
+  for (const item of results) {
+    const key = item.source_id;
 
-  for (
-    const item of results
-  ) {
-    const key =
-      item.source_id;
-
-    if (
-      !key ||
-      seen.has(key)
-    ) {
+    if (!key || seen.has(key)) {
       continue;
     }
 
     seen.add(key);
-
     unique.push(item);
   }
 
-  return unique.slice(
-    0,
-    30
-  );
+  return unique.slice(0, 30);
 }
 
 /* =========================================================
@@ -1782,11 +1720,6 @@ async function searchCoinGecko(q) {
 ========================================================= */
 
 async function search(db, q) {
-
-  /*
-   * 1. Local D1
-   */
-
   const local =
     await searchLocal(
       db,
@@ -1796,19 +1729,12 @@ async function search(db, q) {
   const localMap =
     new Map();
 
-  for (
-    const item of local
-  ) {
+  for (const item of local) {
     const key =
       `${item.object_type}:${item.id}`;
 
-    if (
-      !localMap.has(key)
-    ) {
-      localMap.set(
-        key,
-        item
-      );
+    if (!localMap.has(key)) {
+      localMap.set(key, item);
     }
   }
 
@@ -1816,71 +1742,32 @@ async function search(db, q) {
     [...localMap.values()]
       .map(x => ({
         ...x,
-
         _rank:
           rankLocalResult(
             x,
             q
           )
       }))
-      .sort(
-        (a, b) => {
-          if (
-            a._rank !==
-            b._rank
-          ) {
-            return (
-              a._rank -
-              b._rank
-            );
-          }
-
-          return String(
-            a.name || ''
-          ).localeCompare(
-            String(
-              b.name || ''
-            )
-          );
+      .sort((a, b) => {
+        if (a._rank !== b._rank) {
+          return a._rank - b._rank;
         }
-      )
-      .map(
-        ({
-          _rank,
-          ...x
-        }) => x
-      );
 
-  /*
-   * 2. DeFiLlama chains
-   */
+        return String(a.name || '')
+          .localeCompare(
+            String(b.name || '')
+          );
+      })
+      .map(({ _rank, ...x }) => x);
 
   const defiLlamaChains =
-    await searchDefiLlamaChains(
-      q
-    );
-
-  /*
-   * 3. DeFiLlama protocols
-   */
+    await searchDefiLlamaChains(q);
 
   const externalProtocols =
-    await searchDefiLlamaProtocols(
-      q
-    );
-
-  /*
-   * 4. CoinGecko tokens
-   */
+    await searchDefiLlamaProtocols(q);
 
   const externalTokens =
-    await searchCoinGecko(
-      q
-    );
-
-  /*
-   * 5. Merge
-   */
+    await searchCoinGecko(q);
 
   const merged = [
     ...localResults,
@@ -1889,42 +1776,24 @@ async function search(db, q) {
     ...externalTokens
   ];
 
-  /*
-   * 6. Deduplicate
-   */
-
-  const seen =
-    new Set();
-
+  const seen = new Set();
   const final = [];
 
-  for (
-    const item of merged
-  ) {
+  for (const item of merged) {
     const key =
       item.is_external
         ? `${item.source}:${item.source_id}`
         : `${item.object_type}:${item.id}`;
 
-    if (
-      seen.has(key)
-    ) {
+    if (seen.has(key)) {
       continue;
     }
 
     seen.add(key);
-
     final.push(item);
   }
 
-  /*
-   * 7. Return results
-   */
-
-  return final.slice(
-    0,
-    80
-  );
+  return final.slice(0, 80);
 }
 
 /* =========================================================
@@ -1948,22 +1817,15 @@ async function coinGeckoCoin(id) {
 
   try {
     const response =
-      await fetch(
-        url,
-        {
-          headers: {
-            'accept':
-              'application/json',
-
-            'user-agent':
-              'crypto-ecosystem-research/2.0'
-          }
+      await fetch(url, {
+        headers: {
+          accept: 'application/json',
+          'user-agent':
+            'crypto-ecosystem-research/2.0'
         }
-      );
+      });
 
-    if (
-      !response.ok
-    ) {
+    if (!response.ok) {
       return null;
     }
 
@@ -1975,12 +1837,10 @@ async function coinGeckoCoin(id) {
         `external:coingecko:${d.id}`,
 
       name:
-        d.name ||
-        null,
+        d.name || null,
 
       symbol:
-        d.symbol ||
-        null,
+        d.symbol || null,
 
       object_type:
         'token',
@@ -2001,9 +1861,8 @@ async function coinGeckoCoin(id) {
         true,
 
       website:
-        d.links?.homepage?.find(
-          Boolean
-        ) || null,
+        d.links?.homepage?.find(Boolean) ||
+        null,
 
       description:
         d.description?.en ||
@@ -2061,6 +1920,43 @@ async function coinGeckoCoin(id) {
 }
 
 /* =========================================================
+   PROTOCOL DETAIL ROUTE
+========================================================= */
+
+async function handleProtocolDetail(
+  db,
+  request,
+  protocolId
+) {
+  if (request.method !== 'GET') {
+    return err(
+      'METHOD_NOT_ALLOWED',
+      'Method not allowed',
+      405
+    );
+  }
+
+  const protocol =
+    await getProtocolById(
+      db,
+      protocolId
+    );
+
+  if (!protocol) {
+    return err(
+      'PROTOCOL_NOT_FOUND',
+      'Protocol not found',
+      404
+    );
+  }
+
+  return json({
+    ok: true,
+    item: protocol
+  });
+}
+
+/* =========================================================
    PROXY
 ========================================================= */
 
@@ -2087,9 +1983,7 @@ async function proxy(request) {
     new URL(request.url);
 
   const target =
-    requestUrl.searchParams.get(
-      'url'
-    );
+    requestUrl.searchParams.get('url');
 
   if (!target) {
     return err(
@@ -2112,9 +2006,7 @@ async function proxy(request) {
     );
   }
 
-  if (
-    !allowedProxy(targetUrl)
-  ) {
+  if (!allowedProxy(targetUrl)) {
     return err(
       'PROXY_HOST_NOT_ALLOWED',
       'Target host is not allowed',
@@ -2128,11 +2020,8 @@ async function proxy(request) {
         targetUrl.toString(),
         {
           method: 'GET',
-
           headers: {
-            'accept':
-              'application/json',
-
+            accept: 'application/json',
             'user-agent':
               'crypto-ecosystem-research/2.0'
           }
@@ -2163,9 +2052,7 @@ async function proxy(request) {
   } catch (e) {
     return err(
       'PROXY_FETCH_FAILED',
-      String(
-        e?.message || e
-      ),
+      String(e?.message || e),
       502
     );
   }
@@ -2186,13 +2073,10 @@ async function health(db) {
 
     return json({
       ok: true,
-
       service:
         'crypto-ecosystem-research',
-
       database:
         result?.ok === 1,
-
       time:
         new Date().toISOString()
     });
@@ -2200,17 +2084,11 @@ async function health(db) {
     return json(
       {
         ok: false,
-
         service:
           'crypto-ecosystem-research',
-
         database: false,
-
         error:
-          String(
-            e?.message || e
-          ),
-
+          String(e?.message || e),
         time:
           new Date().toISOString()
       },
@@ -2226,9 +2104,7 @@ async function health(db) {
 async function selfCheck(db) {
   const results = [];
 
-  for (
-    const tableName of TABLES
-  ) {
+  for (const tableName of TABLES) {
     try {
       const r =
         await db
@@ -2242,27 +2118,25 @@ async function selfCheck(db) {
         table:
           tableName,
 
-        ok: true,
+        ok:
+          true,
 
         count:
-          Number(
-            r?.count || 0
-          )
+          Number(r?.count || 0)
       });
     } catch (e) {
       results.push({
         table:
           tableName,
 
-        ok: false,
+        ok:
+          false,
 
         count:
           null,
 
         error:
-          String(
-            e?.message || e
-          )
+          String(e?.message || e)
       });
     }
   }
@@ -2307,9 +2181,7 @@ async function backup(db) {
     tables: {}
   };
 
-  for (
-    const tableName of TABLES
-  ) {
+  for (const tableName of TABLES) {
     try {
       const r =
         await db
@@ -2318,20 +2190,14 @@ async function backup(db) {
           )
           .all();
 
-      output.tables[
-        tableName
-      ] =
+      output.tables[tableName] =
         r.results || [];
     } catch {
-      output.tables[
-        tableName
-      ] = [];
+      output.tables[tableName] = [];
     }
   }
 
-  return json(
-    output
-  );
+  return json(output);
 }
 
 /* =========================================================
@@ -2364,22 +2230,18 @@ async function handleSearch(
   request
 ) {
   const url =
-    new URL(
-      request.url
-    );
+    new URL(request.url);
 
-  const q = (
-    url.searchParams.get(
-      'q'
-    ) || ''
-  ).trim();
+  const q =
+    (
+      url.searchParams.get('q') ||
+      ''
+    ).trim();
 
   if (!q) {
     return json({
       ok: true,
-
       query: '',
-
       items: []
     });
   }
@@ -2394,7 +2256,8 @@ async function handleSearch(
     return json({
       ok: true,
 
-      query: q,
+      query:
+        q,
 
       count:
         items.length,
@@ -2406,7 +2269,8 @@ async function handleSearch(
       {
         ok: false,
 
-        query: q,
+        query:
+          q,
 
         items: [],
 
@@ -2440,14 +2304,10 @@ async function handleExternalToken(
     tokenId;
 
   if (
-    cgId.startsWith(
-      prefix
-    )
+    cgId.startsWith(prefix)
   ) {
     cgId =
-      cgId.slice(
-        prefix.length
-      );
+      cgId.slice(prefix.length);
   }
 
   const item =
@@ -2465,7 +2325,6 @@ async function handleExternalToken(
 
   return json({
     ok: true,
-
     item
   });
 }
@@ -2483,9 +2342,7 @@ async function handleCrud(
   const method =
     request.method;
 
-  if (
-    !table(tableName)
-  ) {
+  if (!table(tableName)) {
     return err(
       'TABLE_NOT_ALLOWED',
       `Table "${tableName}" is not allowed`,
@@ -2493,9 +2350,7 @@ async function handleCrud(
     );
   }
 
-  if (
-    method === 'GET'
-  ) {
+  if (method === 'GET') {
     if (key) {
       const item =
         await one(
@@ -2514,15 +2369,12 @@ async function handleCrud(
 
       return json({
         ok: true,
-
         item
       });
     }
 
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
 
     const items =
       await list(
@@ -2544,24 +2396,9 @@ async function handleCrud(
     });
   }
 
-  if (
-    method === 'POST'
-  ) {
+  if (method === 'POST') {
     const data =
-      await body(
-        request
-      );
-
-    if (
-      tableName ===
-        'snapshots' &&
-      !data.id
-    ) {
-      /*
-       * Snapshot creation is allowed,
-       * but no automatic market data is generated.
-       */
-    }
+      await body(request);
 
     try {
       const item =
@@ -2581,17 +2418,13 @@ async function handleCrud(
     } catch (e) {
       return err(
         'INSERT_FAILED',
-        String(
-          e?.message || e
-        ),
+        String(e?.message || e),
         400
       );
     }
   }
 
-  if (
-    method === 'PUT'
-  ) {
+  if (method === 'PUT') {
     if (!key) {
       return err(
         'ID_REQUIRED',
@@ -2601,9 +2434,7 @@ async function handleCrud(
     }
 
     const data =
-      await body(
-        request
-      );
+      await body(request);
 
     try {
       const item =
@@ -2616,23 +2447,18 @@ async function handleCrud(
 
       return json({
         ok: true,
-
         item
       });
     } catch (e) {
       return err(
         'UPDATE_FAILED',
-        String(
-          e?.message || e
-        ),
+        String(e?.message || e),
         400
       );
     }
   }
 
-  if (
-    method === 'DELETE'
-  ) {
+  if (method === 'DELETE') {
     if (!key) {
       return err(
         'ID_REQUIRED',
@@ -2652,19 +2478,15 @@ async function handleCrud(
 
       return json({
         ok: true,
-
         deleted:
           true,
-
         id:
           key
       });
     } catch (e) {
       return err(
         'DELETE_FAILED',
-        String(
-          e?.message || e
-        ),
+        String(e?.message || e),
         400
       );
     }
@@ -2701,9 +2523,7 @@ export async function onRequest(
   }
 
   const parts =
-    routeParts(
-      context
-    );
+    routeParts(context);
 
   const route =
     parts[0] || '';
@@ -2731,6 +2551,7 @@ export async function onRequest(
           '/api/health',
           '/api/self-check',
           '/api/search?q=',
+          '/api/protocol/:id',
           '/api/proxy?url=',
           '/api/sync',
           '/api/backup'
@@ -2746,9 +2567,7 @@ export async function onRequest(
       route === 'health' &&
       request.method === 'GET'
     ) {
-      return await health(
-        db
-      );
+      return await health(db);
     }
 
     /* ---------------------------------------------
@@ -2759,9 +2578,7 @@ export async function onRequest(
       route === 'self-check' &&
       request.method === 'GET'
     ) {
-      return await selfCheck(
-        db
-      );
+      return await selfCheck(db);
     }
 
     /* ---------------------------------------------
@@ -2779,18 +2596,31 @@ export async function onRequest(
     }
 
     /* ---------------------------------------------
-       EXTERNAL TOKEN
-       /api/external-token/coingecko:bitcoin
+       PROTOCOL DETAIL
+       /api/protocol/:id
     --------------------------------------------- */
 
     if (
-      route ===
-        'external-token' &&
+      route === 'protocol' &&
+      parts[1]
+    ) {
+      return await handleProtocolDetail(
+        db,
+        request,
+        parts.slice(1).join('/')
+      );
+    }
+
+    /* ---------------------------------------------
+       EXTERNAL TOKEN
+    --------------------------------------------- */
+
+    if (
+      route === 'external-token' &&
       parts[1]
     ) {
       if (
-        request.method !==
-        'GET'
+        request.method !== 'GET'
       ) {
         return err(
           'METHOD_NOT_ALLOWED',
@@ -2801,9 +2631,7 @@ export async function onRequest(
 
       return await handleExternalToken(
         request,
-        parts
-          .slice(1)
-          .join('/')
+        parts.slice(1).join('/')
       );
     }
 
@@ -2815,9 +2643,7 @@ export async function onRequest(
       route === 'proxy' &&
       request.method === 'GET'
     ) {
-      return await proxy(
-        request
-      );
+      return await proxy(request);
     }
 
     /* ---------------------------------------------
@@ -2828,9 +2654,7 @@ export async function onRequest(
       route === 'sync' &&
       request.method === 'POST'
     ) {
-      return await sync(
-        db
-      );
+      return await sync(db);
     }
 
     /* ---------------------------------------------
@@ -2841,9 +2665,7 @@ export async function onRequest(
       route === 'backup' &&
       request.method === 'GET'
     ) {
-      return await backup(
-        db
-      );
+      return await backup(db);
     }
 
     /* ---------------------------------------------
@@ -2855,19 +2677,13 @@ export async function onRequest(
       request.method === 'POST'
     ) {
       const result =
-        await seed(
-          db
-        );
+        await seed(db);
 
-      return json(
-        result
-      );
+      return json(result);
     }
 
     /* ---------------------------------------------
        GENERIC TABLE CRUD
-       /api/tokens
-       /api/tokens/:id
     --------------------------------------------- */
 
     const tableName =
@@ -2876,9 +2692,7 @@ export async function onRequest(
     if (tableName) {
       const key =
         parts.length > 1
-          ? parts
-              .slice(1)
-              .join('/')
+          ? parts.slice(1).join('/')
           : null;
 
       return await handleCrud(
@@ -2900,12 +2714,6 @@ export async function onRequest(
     );
 
   } catch (e) {
-
-    /*
-     * Attempt to record server errors.
-     * Failure to write the error log must never
-     * hide the original error.
-     */
 
     try {
       const errorRecord = {
