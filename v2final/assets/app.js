@@ -105,8 +105,8 @@ function dashboardPage() {
         </p>
 
         <p class="muted">
-          下一步将恢复 Search、D1 数据和
-          DeFiLlama 公链搜索。
+          Search 已连接 D1，
+          并支持 DeFiLlama 公链搜索。
         </p>
 
       </div>
@@ -115,7 +115,94 @@ function dashboardPage() {
   `;
 }
 
+function searchGroup(title, items) {
+  if (!items.length) {
+    return "";
+  }
+
+  return `
+    <div class="search-group">
+
+      <h3>
+        ${title}
+      </h3>
+
+      ${items.map((x) => {
+
+        const index =
+          state.search.indexOf(x);
+
+        return `
+          <div
+            class="card"
+            data-result="${index}"
+            style="cursor:pointer"
+          >
+
+            <b>
+              ${esc(
+                x.name ||
+                x.symbol ||
+                "Unknown"
+              )}
+            </b>
+
+            ${
+              x.symbol
+                ? `
+                  <span class="tag">
+                    ${esc(x.symbol)}
+                  </span>
+                `
+                : ""
+            }
+
+            <p class="muted">
+              ${esc(
+                x.object_type ||
+                "object"
+              )}
+              ·
+              ${esc(
+                x.source ||
+                x.source_label ||
+                "D1"
+              )}
+            </p>
+
+          </div>
+        `;
+      }).join("")}
+
+    </div>
+  `;
+}
+
 function searchPage() {
+
+  const chains =
+    state.search.filter(
+      x => x.object_type === "chain"
+    );
+
+  const protocols =
+    state.search.filter(
+      x => x.object_type === "protocol"
+    );
+
+  const tokens =
+    state.search.filter(
+      x => x.object_type === "token"
+    );
+
+  const others =
+    state.search.filter(
+      x =>
+        x.object_type !== "chain" &&
+        x.object_type !== "protocol" &&
+        x.object_type !== "token"
+    );
+
   return `
     <section>
 
@@ -136,35 +223,27 @@ function searchPage() {
 
           ${
             state.search.length
-              ? state.search.map((x, i) => `
-                <div
-                  class="card"
-                  data-result="${i}"
-                  style="cursor:pointer"
-                >
+              ? `
+                ${searchGroup(
+                  "⭐ Chain / 公链",
+                  chains
+                )}
 
-                  <b>
-                    ${esc(x.name || x.symbol || "Unknown")}
-                  </b>
+                ${searchGroup(
+                  "Protocol / 协议",
+                  protocols
+                )}
 
-                  ${
-                    x.symbol
-                      ? `
-                        <span class="tag">
-                          ${esc(x.symbol)}
-                        </span>
-                      `
-                      : ""
-                  }
+                ${searchGroup(
+                  "Token / 代币",
+                  tokens
+                )}
 
-                  <p class="muted">
-                    ${esc(x.object_type || "object")}
-                    ·
-                    ${esc(x.source || x.source_label || "D1")}
-                  </p>
-
-                </div>
-              `).join("")
+                ${searchGroup(
+                  "Other / 其他",
+                  others
+                )}
+              `
               : `
                 <div class="empty">
                   输入关键词搜索。
@@ -194,6 +273,7 @@ function bind() {
           state.page;
 
         render();
+
       };
 
     });
@@ -205,12 +285,16 @@ function bind() {
 
     input.onkeydown = async (e) => {
 
-      if (e.key !== "Enter") return;
+      if (e.key !== "Enter") {
+        return;
+      }
 
       const q =
         input.value.trim();
 
-      if (!q) return;
+      if (!q) {
+        return;
+      }
 
       state.query = q;
 
@@ -237,6 +321,7 @@ function bind() {
       }
 
       render();
+
     };
 
   }
@@ -247,7 +332,9 @@ function bind() {
       item.onclick = () => {
 
         const index =
-          Number(item.dataset.result);
+          Number(
+            item.dataset.result
+          );
 
         const x =
           state.search[index];
@@ -255,7 +342,11 @@ function bind() {
         alert(
           `${x?.name || "Unknown"}\n\n` +
           `类型：${x?.object_type || "-"}\n` +
-          `来源：${x?.source || x?.source_label || "-"}`
+          `来源：${
+            x?.source ||
+            x?.source_label ||
+            "-"
+          }`
         );
 
       };
@@ -269,7 +360,8 @@ addEventListener(
   () => {
 
     state.page =
-      location.hash.slice(1) || "dashboard";
+      location.hash.slice(1) ||
+      "dashboard";
 
     render();
 
