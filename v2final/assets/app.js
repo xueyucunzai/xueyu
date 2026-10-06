@@ -16,7 +16,14 @@ const state = {
   page: location.hash.slice(1) || "dashboard",
   search: [],
   query: "",
-  selectedChain: null
+  selectedChain: null,
+
+  chainMetrics: {
+    tvl: null,
+    tvlDate: null,
+    loading: false,
+    error: null
+  }
 };
 
 const esc = (x) =>
@@ -44,8 +51,231 @@ async function api(path) {
   return data;
 }
 
+/* =========================
+   DeFiLlama TVL
+========================= */
+
+function formatUSD(value) {
+
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return "NO_DATA";
+  }
+
+  if (n >= 1e12) {
+    return "$" + (n / 1e12).toFixed(2) + "T";
+  }
+
+  if (n >= 1e9) {
+    return "$" + (n / 1e9).toFixed(2) + "B";
+  }
+
+  if (n >= 1e6) {
+    return "$" + (n / 1e6).toFixed(2) + "M";
+  }
+
+  if (n >= 1e3) {
+    return "$" + (n / 1e3).toFixed(2) + "K";
+  }
+
+  return "$" + n.toFixed(2);
+}
+
+function formatDate(timestamp) {
+
+  const n = Number(timestamp);
+
+  if (!Number.isFinite(n)) {
+    return "-";
+  }
+
+  const d = new Date(
+    n < 10000000000
+      ? n * 1000
+      : n
+  );
+
+  if (Number.isNaN(d.getTime())) {
+    return "-";
+  }
+
+  return d.toLocaleString(
+    "zh-CN",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }
+  );
+}
+
+function chainNameForDefiLlama(chain) {
+
+  if (!chain) {
+    return "";
+  }
+
+  return (
+    chain.name ||
+    chain.chain ||
+    chain.slug ||
+    ""
+  ).trim();
+}
+
+async function loadChainTvl(chain) {
+
+  const chainName =
+    chainNameForDefiLlama(chain);
+
+  if (!chainName) {
+    state.chainMetrics = {
+      tvl: null,
+      tvlDate: null,
+      loading: false,
+      error: "Missing chain name"
+    };
+
+    return;
+  }
+
+  state.chainMetrics = {
+    tvl: null,
+    tvlDate: null,
+    loading: true,
+    error: null
+  };
+
+  try {
+
+    /*
+      通过我们现有的 /api/proxy
+      请求 DeFiLlama：
+
+      https://api.llama.fi/v2/historicalChainTvl/{chain}
+    */
+
+    const target =
+      "https://api.llama.fi/v2/historicalChainTvl/" +
+      encodeURIComponent(chainName);
+
+    const response =
+      await fetch(
+        API +
+        "proxy?url=" +
+        encodeURIComponent(target),
+        {
+          cache: "no-store"
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+
+    const data =
+      await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error(
+        "Invalid DeFiLlama TVL response"
+      );
+    }
+
+    /*
+      找到最后一个有效 TVL 数据。
+    */
+
+    let latest = null;
+
+    for (
+      let i = data.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      const row = data[i];
+
+      const tvl =
+        Number(
+          row?.tvl
+        );
+
+      const date =
+        Number(
+          row?.date
+        );
+
+      if (
+        Number.isFinite(tvl) &&
+        tvl >= 0 &&
+        Number.isFinite(date)
+      ) {
+
+        latest = {
+          tvl,
+          date
+        };
+
+        break;
+      }
+    }
+
+    if (!latest) {
+      throw new Error(
+        "No valid TVL data"
+      );
+    }
+
+    state.chainMetrics = {
+      tvl: latest.tvl,
+      tvlDate: latest.date,
+      loading: false,
+      error: null
+    };
+
+  } catch (error) {
+
+    console.error(
+      "DeFiLlama TVL error:",
+      error
+    );
+
+    state.chainMetrics = {
+      tvl: null,
+      tvlDate: null,
+      loading: false,
+      error: String(
+        error?.message || error
+      )
+    };
+  }
+
+  /*
+    TVL 加载完成后重新渲染生态页。
+  */
+
+  if (
+    state.page === "ecosystem" &&
+    state.selectedChain === chain
+  ) {
+    render();
+  }
+}
+
+/* =========================
+   Main Render
+========================= */
+
 function render() {
-  const app = document.querySelector("#app");
+
+  const app =
+    document.querySelector("#app");
 
   if (!app) return;
 
@@ -85,7 +315,12 @@ function render() {
   bind();
 }
 
+/* =========================
+   Dashboard
+========================= */
+
 function dashboardPage() {
+
   return `
     <section class="hero">
 
@@ -118,8 +353,18 @@ function dashboardPage() {
   `;
 }
 
-function searchGroup(title, items, type) {
+/* =========================
+   Search
+========================= */
+
+function searchGroup(
+  title,
+  items,
+  type
+) {
+
   if (!items.length) {
+
     return `
       <section class="search-section">
 
@@ -163,6 +408,7 @@ function searchGroup(title, items, type) {
               <div class="search-main">
 
                 <div class="search-name">
+
                   ${esc(
                     x.name ||
                     x.symbol ||
@@ -182,6 +428,7 @@ function searchGroup(title, items, type) {
                 </div>
 
                 <div class="search-source">
+
                   ${esc(
                     x.object_type === "chain"
                       ? "公链"
@@ -199,6 +446,7 @@ function searchGroup(title, items, type) {
                     x.source_label ||
                     "D1"
                   )}
+
                 </div>
 
               </div>
@@ -229,21 +477,24 @@ function searchPage() {
   const chains =
     state.search
       .filter(
-        x => x.object_type === "chain"
+        x =>
+          x.object_type === "chain"
       )
       .slice(0, 10);
 
   const protocols =
     state.search
       .filter(
-        x => x.object_type === "protocol"
+        x =>
+          x.object_type === "protocol"
       )
       .slice(0, 10);
 
   const tokens =
     state.search
       .filter(
-        x => x.object_type === "token"
+        x =>
+          x.object_type === "token"
       )
       .slice(0, 10);
 
@@ -317,6 +568,10 @@ function searchPage() {
   `;
 }
 
+/* =========================
+   Ecosystem
+========================= */
+
 function ecosystemPage() {
 
   const chain =
@@ -329,6 +584,37 @@ function ecosystemPage() {
   const symbol =
     chain.symbol ||
     "-";
+
+  const metrics =
+    state.chainMetrics;
+
+  let tvlValue = "NO_DATA";
+  let tvlDescription =
+    "Total Value Locked · 总锁仓价值";
+
+  if (metrics.loading) {
+
+    tvlValue =
+      "读取中...";
+
+  } else if (
+    Number.isFinite(
+      Number(metrics.tvl)
+    )
+  ) {
+
+    tvlValue =
+      formatUSD(metrics.tvl);
+
+    tvlDescription =
+      "Total Value Locked · 总锁仓价值" +
+      (
+        metrics.tvlDate
+          ? ` · 数据时间 ${formatDate(metrics.tvlDate)}`
+          : ""
+      );
+
+  }
 
   return `
     <section>
@@ -363,17 +649,35 @@ function ecosystemPage() {
         <div class="data-grid">
 
           <div class="card">
-            <b>类型</b>
-            <p>Chain / 公链</p>
+
+            <b>
+              类型
+            </b>
+
+            <p>
+              Chain / 公链
+            </p>
+
           </div>
 
           <div class="card">
-            <b>Symbol</b>
-            <p>${esc(symbol)}</p>
+
+            <b>
+              Symbol
+            </b>
+
+            <p>
+              ${esc(symbol)}
+            </p>
+
           </div>
 
           <div class="card">
-            <b>数据来源</b>
+
+            <b>
+              数据来源
+            </b>
+
             <p>
               ${esc(
                 chain.source ||
@@ -381,6 +685,7 @@ function ecosystemPage() {
                 "DeFiLlama"
               )}
             </p>
+
           </div>
 
         </div>
@@ -397,8 +702,8 @@ function ecosystemPage() {
 
           ${metricCard(
             "TVL",
-            "NO_DATA",
-            "Total Value Locked · 总锁仓价值"
+            tvlValue,
+            tvlDescription
           )}
 
           ${metricCard(
@@ -433,6 +738,34 @@ function ecosystemPage() {
 
         </div>
 
+        ${
+          metrics.error
+            ? `
+              <p class="muted">
+                TVL 数据读取失败：
+                ${esc(metrics.error)}
+              </p>
+            `
+            : ""
+        }
+
+        ${
+          metrics.tvl !== null &&
+          metrics.tvlDate
+            ? `
+              <p class="muted">
+                数据源：DeFiLlama
+                · 数据时间：
+                ${esc(
+                  formatDate(
+                    metrics.tvlDate
+                  )
+                )}
+              </p>
+            `
+            : ""
+        }
+
       </div>
 
       <div class="panel">
@@ -457,6 +790,7 @@ function ecosystemPage() {
 
           <div>
             Identity
+
             <span class="status-ok">
               ✓ 已识别
             </span>
@@ -464,6 +798,7 @@ function ecosystemPage() {
 
           <div>
             Ecosystem
+
             <span class="status-ok">
               ✓ 已建立
             </span>
@@ -471,13 +806,26 @@ function ecosystemPage() {
 
           <div>
             Metrics
-            <span class="status-wait">
-              NO_DATA
+
+            <span class="${
+              metrics.tvl !== null
+                ? "status-ok"
+                : "status-wait"
+            }">
+
+              ${
+                metrics.tvl !== null
+                  ? "✓ TVL 已接入"
+                  : "NO_DATA"
+              }
+
             </span>
+
           </div>
 
           <div>
             Research
+
             <span class="status-wait">
               未开始
             </span>
@@ -491,29 +839,43 @@ function ecosystemPage() {
   `;
 }
 
-function metricCard(title, value, description) {
+/* =========================
+   Metric Card
+========================= */
+
+function metricCard(
+  title,
+  value,
+  description
+) {
+
   return `
     <div class="card">
 
       <b>
-        ${title}
+        ${esc(title)}
       </b>
 
       <h2>
-        ${value}
+        ${esc(value)}
       </h2>
 
       <p class="muted">
-        ${description}
+        ${esc(description)}
       </p>
 
     </div>
   `;
 }
 
+/* =========================
+   Events
+========================= */
+
 function bind() {
 
-  document.querySelectorAll("[data-page]")
+  document
+    .querySelectorAll("[data-page]")
     .forEach((button) => {
 
       button.onclick = () => {
@@ -531,10 +893,14 @@ function bind() {
     });
 
   const input =
-    document.querySelector("#searchInput");
+    document.querySelector(
+      "#searchInput"
+    );
 
   const searchButton =
-    document.querySelector("#searchButton");
+    document.querySelector(
+      "#searchButton"
+    );
 
   async function doSearch() {
 
@@ -583,11 +949,14 @@ function bind() {
   }
 
   if (searchButton) {
+
     searchButton.onclick =
       doSearch;
+
   }
 
-  document.querySelectorAll("[data-result]")
+  document
+    .querySelectorAll("[data-result]")
     .forEach((item) => {
 
       item.onclick = () => {
@@ -605,7 +974,20 @@ function bind() {
 
         if (type === "chain") {
 
-          state.selectedChain = x;
+          state.selectedChain =
+            x;
+
+          /*
+            每次进入新的公链，
+            先清空旧 TVL。
+          */
+
+          state.chainMetrics = {
+            tvl: null,
+            tvlDate: null,
+            loading: true,
+            error: null
+          };
 
           state.page =
             "ecosystem";
@@ -614,6 +996,13 @@ function bind() {
             "ecosystem";
 
           render();
+
+          /*
+            页面显示“读取中...”
+            后台读取真实 TVL。
+          */
+
+          loadChainTvl(x);
 
           return;
         }
@@ -635,7 +1024,9 @@ function bind() {
     });
 
   const backSearch =
-    document.querySelector("#backSearch");
+    document.querySelector(
+      "#backSearch"
+    );
 
   if (backSearch) {
 
@@ -655,6 +1046,10 @@ function bind() {
 
 }
 
+/* =========================
+   Hash Change
+========================= */
+
 addEventListener(
   "hashchange",
   () => {
@@ -667,5 +1062,9 @@ addEventListener(
 
   }
 );
+
+/* =========================
+   Start
+========================= */
 
 render();
