@@ -1320,6 +1320,338 @@ async function searchDefiLlamaChains(q) {
 }
 
 /* =========================================================
+   DEFILLAMA PROTOCOL SEARCH
+========================================================= */
+
+function rankDefiLlamaProtocol(
+  protocol,
+  q
+) {
+  const query =
+    normalizeSearchText(q);
+
+  const name =
+    normalizeSearchText(
+      protocol?.name
+    );
+
+  const symbol =
+    normalizeSearchText(
+      protocol?.symbol
+    );
+
+  const slug =
+    normalizeSearchText(
+      protocol?.slug ||
+      protocol?.id
+    );
+
+  if (name === query) {
+    return 1;
+  }
+
+  if (slug === query) {
+    return 2;
+  }
+
+  if (symbol === query) {
+    return 3;
+  }
+
+  if (name.startsWith(query)) {
+    return 4;
+  }
+
+  if (slug.startsWith(query)) {
+    return 5;
+  }
+
+  if (symbol.startsWith(query)) {
+    return 6;
+  }
+
+  if (name.includes(query)) {
+    return 7;
+  }
+
+  if (slug.includes(query)) {
+    return 8;
+  }
+
+  if (symbol.includes(query)) {
+    return 9;
+  }
+
+  return 99;
+}
+
+async function getDefiLlamaProtocols() {
+  const urls = [
+    'https://api.llama.fi/protocols',
+    'https://api.llama.fi/v2/protocols'
+  ];
+
+  for (
+    const url of urls
+  ) {
+    try {
+      const response =
+        await fetch(
+          url,
+          {
+            method: 'GET',
+
+            headers: {
+              'accept':
+                'application/json',
+
+              'user-agent':
+                'crypto-ecosystem-research/2.0'
+            }
+          }
+        );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const data =
+        await response.json();
+
+      if (
+        Array.isArray(data)
+      ) {
+        return data;
+      }
+
+      if (
+        Array.isArray(
+          data?.protocols
+        )
+      ) {
+        return data.protocols;
+      }
+
+    } catch {}
+  }
+
+  return [];
+}
+
+async function searchDefiLlamaProtocols(q) {
+  const query =
+    normalizeSearchText(q);
+
+  if (!query) {
+    return [];
+  }
+
+  const protocols =
+    await getDefiLlamaProtocols();
+
+  if (!protocols.length) {
+    return [];
+  }
+
+  const aliases =
+    aliasesForQuery(q);
+
+  const candidates = [];
+
+  for (
+    const alias of aliases
+  ) {
+    const normalized =
+      normalizeSearchText(
+        alias
+      );
+
+    if (!normalized) {
+      continue;
+    }
+
+    for (
+      const protocol of protocols
+    ) {
+      const rank =
+        rankDefiLlamaProtocol(
+          protocol,
+          alias
+        );
+
+      if (
+        rank >= 99
+      ) {
+        continue;
+      }
+
+      candidates.push({
+        id:
+          'external:defillama:protocol:' +
+          (
+            protocol?.slug ||
+            protocol?.id ||
+            protocol?.name
+          ),
+
+        name:
+          protocol?.name ||
+          null,
+
+        symbol:
+          protocol?.symbol ||
+          null,
+
+        object_type:
+          'protocol',
+
+        source:
+          'DeFiLlama',
+
+        source_label:
+          'DeFiLlama',
+
+        source_id:
+          protocol?.slug ||
+          protocol?.id ||
+          protocol?.name ||
+          null,
+
+        category:
+          protocol?.category ||
+          protocol?.protocol_type ||
+          null,
+
+        protocol_type:
+          protocol?.category ||
+          protocol?.protocol_type ||
+          null,
+
+        chains:
+          Array.isArray(
+            protocol?.chains
+          )
+            ? protocol.chains
+            : [],
+
+        tvl:
+          Number.isFinite(
+            Number(
+              protocol?.tvl
+            )
+          )
+            ? Number(
+                protocol.tvl
+              )
+            : null,
+
+        mcap:
+          Number.isFinite(
+            Number(
+              protocol?.mcap
+            )
+          )
+            ? Number(
+                protocol.mcap
+              )
+            : null,
+
+        change_1h:
+          protocol?.change_1h ??
+          null,
+
+        change_1d:
+          protocol?.change_1d ??
+          null,
+
+        change_7d:
+          protocol?.change_7d ??
+          null,
+
+        website:
+          protocol?.url ||
+          protocol?.website ||
+          null,
+
+        logo:
+          protocol?.logo ||
+          null,
+
+        identity_status:
+          'PROPOSED',
+
+        is_external:
+          true,
+
+        query_used:
+          alias,
+
+        _rank:
+          rank
+      });
+    }
+  }
+
+  candidates.sort(
+    (a, b) => {
+      if (
+        a._rank !==
+        b._rank
+      ) {
+        return (
+          a._rank -
+          b._rank
+        );
+      }
+
+      return String(
+        a.name || ''
+      ).localeCompare(
+        String(
+          b.name || ''
+        )
+      );
+    }
+  );
+
+  const unique = [];
+
+  const seen =
+    new Set();
+
+  for (
+    const item of candidates
+  ) {
+    const key =
+      String(
+        item.source_id ||
+        item.name ||
+        ''
+      ).toLowerCase();
+
+    if (
+      !key ||
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    seen.add(key);
+
+    unique.push(item);
+  }
+
+  return unique
+    .slice(0, 20)
+    .map(
+      ({
+        _rank,
+        ...item
+      }) => item
+    );
+}
+
+/* =========================================================
    COINGECKO TOKEN SEARCH
 ========================================================= */
 
@@ -1450,6 +1782,7 @@ async function searchCoinGecko(q) {
 ========================================================= */
 
 async function search(db, q) {
+
   /*
    * 1. Local D1
    */
@@ -1528,7 +1861,16 @@ async function search(db, q) {
     );
 
   /*
-   * 3. CoinGecko tokens
+   * 3. DeFiLlama protocols
+   */
+
+  const externalProtocols =
+    await searchDefiLlamaProtocols(
+      q
+    );
+
+  /*
+   * 4. CoinGecko tokens
    */
 
   const externalTokens =
@@ -1537,17 +1879,18 @@ async function search(db, q) {
     );
 
   /*
-   * 4. Merge
+   * 5. Merge
    */
 
   const merged = [
     ...localResults,
     ...defiLlamaChains,
+    ...externalProtocols,
     ...externalTokens
   ];
 
   /*
-   * 5. Deduplicate
+   * 6. Deduplicate
    */
 
   const seen =
@@ -1575,7 +1918,7 @@ async function search(db, q) {
   }
 
   /*
-   * 6. Return results
+   * 7. Return results
    */
 
   return final.slice(
@@ -2366,6 +2709,7 @@ export async function onRequest(
     parts[0] || '';
 
   try {
+
     /* ---------------------------------------------
        ROOT
     --------------------------------------------- */
