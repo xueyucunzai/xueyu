@@ -772,6 +772,12 @@ async function getProtocolAssociatedTokens(
       relation_type:
         row.relation_type || null,
 
+      association_status:
+        'CONFIRMED',
+
+      association_source:
+        'D1.protocol_tokens',
+
       token:
         tokenIdentityFromRow(
           row,
@@ -821,7 +827,12 @@ async function getProtocolById(
       'CONFIRMED',
 
     associated_tokens:
-      associatedTokens
+      associatedTokens,
+
+    token_status:
+      associatedTokens.length
+        ? 'CONFIRMED'
+        : 'NO_DATA'
   };
 }
 
@@ -952,8 +963,15 @@ async function searchLocal(db, q) {
         };
 
         /*
-         * Protocol 的关联 Token 单独读取。
-         * 不通过协议名称猜 Token。
+         * Protocol 只从 protocol_tokens
+         * 读取关联 Token。
+         *
+         * 绝不通过：
+         * Protocol name
+         * Protocol symbol
+         * Protocol slug
+         *
+         * 猜 Token。
          */
         if (qx.table === 'protocols') {
           base.associated_tokens =
@@ -961,6 +979,11 @@ async function searchLocal(db, q) {
               db,
               row.id
             );
+
+          base.token_status =
+            base.associated_tokens.length
+              ? 'CONFIRMED'
+              : 'NO_DATA';
         }
 
         output.push(base);
@@ -1206,54 +1229,125 @@ async function getDefiLlamaProtocolDetail(sourceId) {
 }
 
 /*
- * 只接受外部来源明确给出的 Token 标识。
+ * =========================================================
+ * 严格的外部 Token 证据提取
+ * =========================================================
  *
- * 不根据:
- *   Protocol name -> Token symbol
+ * 允许：
  *
- * 做猜测。
+ *   gecko_id
+ *   coingecko_id
+ *   coin_id
+ *
+ * 但不允许：
+ *
+ *   Protocol symbol -> Token
+ *   Protocol name   -> Token
+ *   Protocol address -> Token contract
+ *   任意 object.id -> CoinGecko ID
+ *
+ * 特别重要：
+ *
+ * Aave Aptos 当前 DeFiLlama：
+ *
+ *   symbol   = AAVE
+ *   address  = 0x7fc...
+ *   gecko_id = null
+ *   cmcId    = null
+ *
+ * 所以这里必须返回 null。
  */
+
 function extractExplicitExternalToken(detail) {
   if (!detail || typeof detail !== 'object') {
     return null;
   }
 
-  const candidates = [
-    detail.token,
-    detail.token_id,
-    detail.tokenId,
-    detail.gecko_id,
-    detail.coingecko_id,
-    detail.coin_id,
-    detail.governance_token,
-    detail.governanceToken
+  const directFields = [
+    'gecko_id',
+    'coingecko_id',
+    'coin_id'
   ];
 
-  for (const value of candidates) {
-    if (!value) {
-      continue;
+  for (const field of directFields) {
+    const value = detail[field];
+
+    if (
+      typeof value === 'string' &&
+      value.trim()
+    ) {
+      return {
+        provider:
+          'CoinGecko',
+
+        coingecko_id:
+          value.trim(),
+
+        evidence:
+          `DeFiLlama.${field}`,
+
+        association_status:
+          'SOURCE_EXPLICIT'
+      };
     }
-
-    if (typeof value === 'object') {
-      const id =
-        value.coingecko_id ||
-        value.coin_id ||
-        value.gecko_id ||
-        value.id;
-
-      if (id) {
-        return {
-          coingecko_id: String(id)
-        };
-      }
-
-      continue;
-    }
-
-    return {
-      coingecko_id: String(value)
-    };
   }
+
+  /*
+   * 只有当嵌套对象本身明确声明
+   * CoinGecko 字段时才接受。
+   */
+  const nestedFields = [
+    'token',
+    'governance_token',
+    'governanceToken',
+    'associated_token',
+    'associatedToken'
+  ];
+
+  for (const field of nestedFields) {
+    const value = detail[field];
+
+    if (
+      !value ||
+      typeof value !== 'object'
+    ) {
+      continue;
+    }
+
+    const id =
+      value.gecko_id ||
+      value.coingecko_id ||
+      value.coin_id;
+
+    if (
+      typeof id === 'string' &&
+      id.trim()
+    ) {
+      return {
+        provider:
+          'CoinGecko',
+
+        coingecko_id:
+          id.trim(),
+
+        evidence:
+          `DeFiLlama.${field}.coingecko_id`,
+
+        association_status:
+          'SOURCE_EXPLICIT'
+      };
+    }
+  }
+
+  /*
+   * 注意：
+   *
+   * 这里故意不读取：
+   *
+   * value.id
+   *
+   * 因为普通 id 无法证明它是 CoinGecko ID。
+   */
 
   return null;
 }
@@ -1262,7 +1356,22 @@ async function enrichExternalProtocolToken(
   protocol
 ) {
   if (!protocol?.source_id) {
-    return protocol;
+    return {
+      ...protocol,
+
+      associated_tokens: [],
+
+      token_status:
+        'NO_DATA',
+
+      association_evidence: {
+        status:
+          'NO_DATA',
+
+        reason:
+          'Protocol has no source_id'
+      }
+    };
   }
 
   const detail =
@@ -1273,21 +1382,96 @@ async function enrichExternalProtocolToken(
   if (!detail) {
     return {
       ...protocol,
+
       associated_tokens: [],
-      token_status: 'NO_DATA'
+
+      token_status:
+        'NO_DATA',
+
+      association_evidence: {
+        status:
+          'NO_DATA',
+
+        source:
+          'DeFiLlama',
+
+        source_id:
+          protocol.source_id,
+
+        reason:
+          'Protocol detail could not be retrieved'
+      }
     };
   }
+
+  /*
+   * 保留原始 Protocol detail 中的
+   * 关键身份信息。
+   *
+   * 但是 address 永远不直接当 Token contract。
+   */
+  const protocolEvidence = {
+    defillama_protocol_id:
+      detail.id ?? null,
+
+    defillama_protocol_address:
+      detail.address ?? null,
+
+    defillama_protocol_symbol:
+      detail.symbol ?? null,
+
+    defillama_chain:
+      detail.chain ?? null,
+
+    gecko_id:
+      detail.gecko_id ?? null,
+
+    cmcId:
+      detail.cmcId ?? null,
+
+    parentProtocol:
+      detail.parentProtocol ?? null
+  };
 
   const explicit =
     extractExplicitExternalToken(
       detail
     );
 
+  /*
+   * Aave Aptos 会在这里进入：
+   *
+   * gecko_id = null
+   * cmcId     = null
+   *
+   * 因此：
+   * NO_DATA
+   */
   if (!explicit?.coingecko_id) {
     return {
       ...protocol,
+
       associated_tokens: [],
-      token_status: 'NO_DATA'
+
+      token_status:
+        'NO_DATA',
+
+      association_evidence: {
+        status:
+          'NO_DATA',
+
+        source:
+          'DeFiLlama',
+
+        source_id:
+          protocol.source_id,
+
+        reason:
+          'DeFiLlama did not provide an explicit CoinGecko/token identifier',
+
+        protocol_evidence:
+          protocolEvidence
+      }
     };
   }
 
@@ -1296,6 +1480,13 @@ async function enrichExternalProtocolToken(
       explicit.coingecko_id
     );
 
+  /*
+   * 已经有明确 CoinGecko ID，
+   * 但市场详情获取失败。
+   *
+   * 仍然可以保留 Token Identity reference，
+   * 但不能假装有市场数据。
+   */
   if (!coin) {
     return {
       ...protocol,
@@ -1304,26 +1495,70 @@ async function enrichExternalProtocolToken(
         relation_type:
           'associated_token',
 
+        association_status:
+          'SOURCE_EXPLICIT',
+
+        association_source:
+          'DeFiLlama',
+
+        evidence:
+          explicit.evidence,
+
         token: {
+          id:
+            `external:coingecko:${explicit.coingecko_id}`,
+
           coingecko_id:
             explicit.coingecko_id,
 
           identity_status:
-            'PROPOSED'
+            'PROPOSED',
+
+          market_data:
+            null
         }
       }],
 
       token_status:
-        'IDENTITY_ONLY'
+        'IDENTITY_ONLY',
+
+      association_evidence: {
+        status:
+          'SOURCE_EXPLICIT',
+
+        source:
+          'DeFiLlama',
+
+        identifier:
+          explicit.coingecko_id,
+
+        evidence:
+          explicit.evidence,
+
+        protocol_evidence:
+          protocolEvidence
+      }
     };
   }
 
+  /*
+   * 明确来源 + CoinGecko 成功。
+   */
   return {
     ...protocol,
 
     associated_tokens: [{
       relation_type:
         'associated_token',
+
+      association_status:
+        'SOURCE_EXPLICIT',
+
+      association_source:
+        'DeFiLlama',
+
+      evidence:
+        explicit.evidence,
 
       token: {
         id:
@@ -1347,7 +1582,24 @@ async function enrichExternalProtocolToken(
     }],
 
     token_status:
-      'MARKET_DATA_AVAILABLE'
+      'SOURCE_EXPLICIT',
+
+    association_evidence: {
+      status:
+        'SOURCE_EXPLICIT',
+
+      source:
+        'DeFiLlama',
+
+      identifier:
+        explicit.coingecko_id,
+
+      evidence:
+        explicit.evidence,
+
+      protocol_evidence:
+        protocolEvidence
+    }
   };
 }
 
@@ -1584,8 +1836,9 @@ async function searchDefiLlamaProtocols(q) {
   }
 
   /*
-   * 只对前面的少量高相关 Protocol
-   * 尝试读取明确 Token 信息。
+   * 只对高相关 Protocol 查询 detail。
+   *
+   * 不对整个 DeFiLlama 数据集逐个查询。
    */
   const top =
     unique.slice(0, 20);
@@ -1602,8 +1855,19 @@ async function searchDefiLlamaProtocols(q) {
     } catch {
       enriched.push({
         ...item,
+
         associated_tokens: [],
-        token_status: 'NO_DATA'
+
+        token_status:
+          'NO_DATA',
+
+        association_evidence: {
+          status:
+            'NO_DATA',
+
+          reason:
+            'Token association enrichment failed'
+        }
       });
     }
   }
@@ -2552,6 +2816,7 @@ export async function onRequest(
           '/api/self-check',
           '/api/search?q=',
           '/api/protocol/:id',
+          '/api/external-token/:id',
           '/api/proxy?url=',
           '/api/sync',
           '/api/backup'
