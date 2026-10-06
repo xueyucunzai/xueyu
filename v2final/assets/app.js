@@ -21,14 +21,40 @@ const state = {
   chainMetrics: {
     tvl: null,
     tvlDate: null,
+    tvlLoading: false,
+    tvlError: null,
+
     stablecoins: null,
     stablecoinsDate: null,
-    tvlLoading: false,
     stablecoinsLoading: false,
-    tvlError: null,
-    stablecoinsError: null
+    stablecoinsError: null,
+
+    dexVolume: null,
+    dexVolumeDate: null,
+    dexVolumeLoading: false,
+    dexVolumeError: null,
+
+    fees: null,
+    feesDate: null,
+    feesLoading: false,
+    feesError: null,
+
+    revenue: null,
+    revenueDate: null,
+    revenueLoading: false,
+    revenueError: null,
+
+    users: null,
+    usersDate: null,
+    usersLoading: false,
+    usersError: null
   }
 };
+
+
+/* =========================
+   基础工具
+========================= */
 
 const esc = (x) =>
   String(x ?? "").replace(/[&<>"']/g, (c) => ({
@@ -39,33 +65,50 @@ const esc = (x) =>
     "'": "&#39;"
   })[c]);
 
-async function api(path) {
 
+async function api(path) {
   const r = await fetch(API + path, {
     cache: "no-store"
   });
 
-  const data = await r.json();
+  const data = await r.json().catch(() => ({}));
 
   if (!r.ok || data.ok === false) {
-
     throw new Error(
       data.error?.message ||
       `HTTP ${r.status}`
     );
-
   }
 
   return data;
 }
 
 
+async function fetchProxy(target) {
+  const r = await fetch(
+    API +
+    "proxy?url=" +
+    encodeURIComponent(target),
+    {
+      cache: "no-store"
+    }
+  );
+
+  if (!r.ok) {
+    throw new Error(
+      `HTTP ${r.status}`
+    );
+  }
+
+  return r.json();
+}
+
+
 /* =========================
-   Number / Date
+   数字 / 日期
 ========================= */
 
 function formatUSD(value) {
-
   const n = Number(value);
 
   if (!Number.isFinite(n)) {
@@ -73,34 +116,60 @@ function formatUSD(value) {
   }
 
   if (n >= 1e12) {
-    return "$" + (n / 1e12).toFixed(2) + "T";
+    return "$" +
+      (n / 1e12).toFixed(2) +
+      "T";
   }
 
   if (n >= 1e9) {
-    return "$" + (n / 1e9).toFixed(2) + "B";
+    return "$" +
+      (n / 1e9).toFixed(2) +
+      "B";
   }
 
   if (n >= 1e6) {
-    return "$" + (n / 1e6).toFixed(2) + "M";
+    return "$" +
+      (n / 1e6).toFixed(2) +
+      "M";
   }
 
   if (n >= 1e3) {
-    return "$" + (n / 1e3).toFixed(2) + "K";
+    return "$" +
+      (n / 1e3).toFixed(2) +
+      "K";
   }
 
-  return "$" + n.toFixed(2);
+  return "$" +
+    n.toFixed(2);
+}
+
+
+function formatNumber(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return "NO_DATA";
+  }
+
+  return new Intl.NumberFormat(
+    "en-US",
+    {
+      maximumFractionDigits: 0
+    }
+  ).format(n);
 }
 
 
 function formatDate(timestamp) {
-
   const n = Number(timestamp);
 
   if (!Number.isFinite(n)) {
     return "-";
   }
 
-  const d = new Date(n * 1000);
+  const d = new Date(
+    n * 1000
+  );
 
   if (Number.isNaN(d.getTime())) {
     return "-";
@@ -120,37 +189,74 @@ function formatDate(timestamp) {
 
 
 /* =========================
-   TVL
+   重置指标
 ========================= */
 
-async function loadChainTvl(chain) {
+function resetMetrics() {
+  state.chainMetrics = {
 
-  const chainName =
-    String(
-      chain?.name ||
-      chain?.chain ||
-      ""
-    ).trim();
+    tvl: null,
+    tvlDate: null,
+    tvlLoading: false,
+    tvlError: null,
 
-  if (!chainName) {
+    stablecoins: null,
+    stablecoinsDate: null,
+    stablecoinsLoading: false,
+    stablecoinsError: null,
 
-    state.chainMetrics.tvlLoading = false;
-    state.chainMetrics.tvlError = "Missing chain name";
+    dexVolume: null,
+    dexVolumeDate: null,
+    dexVolumeLoading: false,
+    dexVolumeError: null,
 
-    render();
+    fees: null,
+    feesDate: null,
+    feesLoading: false,
+    feesError: null,
 
+    revenue: null,
+    revenueDate: null,
+    revenueLoading: false,
+    revenueError: null,
+
+    users: null,
+    usersDate: null,
+    usersLoading: false,
+    usersError: null
+  };
+}
+
+
+/* =========================
+   通用指标读取器
+========================= */
+
+async function loadMetric(
+  key,
+  chain,
+  targetBuilder,
+  parser,
+  loadingKey
+) {
+
+  const name = String(
+    chain?.name ||
+    chain?.chain ||
+    ""
+  ).trim();
+
+
+  if (!name) {
     return;
   }
 
 
-  console.log(
-    "[TVL] Loading:",
-    chainName
-  );
+  state.chainMetrics[loadingKey] = true;
 
-
-  state.chainMetrics.tvlLoading = true;
-  state.chainMetrics.tvlError = null;
+  state.chainMetrics[
+    key + "Error"
+  ] = null;
 
   render();
 
@@ -158,191 +264,176 @@ async function loadChainTvl(chain) {
   try {
 
     const target =
-      "https://api.llama.fi/v2/historicalChainTvl/" +
-      encodeURIComponent(chainName);
-
-
-    const url =
-      API +
-      "proxy?url=" +
-      encodeURIComponent(target);
-
+      targetBuilder(name);
 
     console.log(
-      "[TVL] Request:",
+      `[${key}] Request:`,
       target
     );
 
 
-    const response =
-      await fetch(url, {
-        cache: "no-store"
-      });
+    const raw =
+      await fetchProxy(target);
 
 
     console.log(
-      "[TVL] HTTP:",
-      response.status
+      `[${key}] Response:`,
+      raw
     );
 
 
-    if (!response.ok) {
-
-      throw new Error(
-        `HTTP ${response.status}`
-      );
-
-    }
+    const result =
+      parser(raw);
 
 
-    const data =
-      await response.json();
-
-
-    console.log(
-      "[TVL] Response:",
-      Array.isArray(data)
-        ? `array(${data.length})`
-        : data
-    );
-
-
-    if (!Array.isArray(data)) {
-
-      throw new Error(
-        "DeFiLlama 返回的数据不是数组"
-      );
-
-    }
-
-
-    let latest = null;
-
-
-    for (
-      let i = data.length - 1;
-      i >= 0;
-      i--
+    if (
+      !result ||
+      !Number.isFinite(
+        Number(result.value)
+      )
     ) {
 
-      const row = data[i];
-
-      const tvl =
-        Number(row?.tvl);
-
-      const date =
-        Number(row?.date);
-
-
-      if (
-        Number.isFinite(tvl) &&
-        tvl > 0 &&
-        Number.isFinite(date)
-      ) {
-
-        latest = {
-          tvl,
-          date
-        };
-
-        break;
-      }
-
-    }
-
-
-    if (!latest) {
-
-      for (
-        let i = data.length - 1;
-        i >= 0;
-        i--
-      ) {
-
-        const row = data[i];
-
-        const tvl =
-          Number(row?.tvl);
-
-        const date =
-          Number(row?.date);
-
-
-        if (
-          Number.isFinite(tvl) &&
-          Number.isFinite(date)
-        ) {
-
-          latest = {
-            tvl,
-            date
-          };
-
-          break;
-        }
-
-      }
-
-    }
-
-
-    if (!latest) {
-
       throw new Error(
-        "没有找到有效 TVL 数据"
+        "没有找到有效数据"
       );
 
     }
 
 
-    console.log(
-      "[TVL] Latest:",
-      latest
-    );
+    state.chainMetrics[key] =
+      Number(result.value);
 
+    state.chainMetrics[
+      key + "Date"
+    ] =
+      result.date ||
+      Math.floor(
+        Date.now() / 1000
+      );
 
-    state.chainMetrics.tvl =
-      latest.tvl;
-
-    state.chainMetrics.tvlDate =
-      latest.date;
-
-    state.chainMetrics.tvlError =
-      null;
+    state.chainMetrics[
+      key + "Error"
+    ] = null;
 
 
   } catch (error) {
 
     console.error(
-      "[TVL] Error:",
+      `[${key}] Error:`,
       error
     );
 
 
-    state.chainMetrics.tvl =
+    state.chainMetrics[key] =
       null;
 
-    state.chainMetrics.tvlDate =
-      null;
+    state.chainMetrics[
+      key + "Date"
+    ] = null;
 
-    state.chainMetrics.tvlError =
+    state.chainMetrics[
+      key + "Error"
+    ] =
       error?.message ||
       String(error);
 
   }
 
 
-  state.chainMetrics.tvlLoading =
-    false;
+  state.chainMetrics[
+    loadingKey
+  ] = false;
 
 
   if (
     state.page === "ecosystem"
   ) {
-
     render();
+  }
+
+}
+
+
+/* =========================
+   数组最新数据
+========================= */
+
+function parseLatestArray(
+  data,
+  valueGetter
+) {
+
+  if (!Array.isArray(data)) {
+    return null;
+  }
+
+
+  for (
+    let i = data.length - 1;
+    i >= 0;
+    i--
+  ) {
+
+    const row =
+      data[i];
+
+    const value =
+      Number(
+        valueGetter(row)
+      );
+
+    const date =
+      Number(
+        row?.date ??
+        row?.timestamp
+      );
+
+
+    if (
+      Number.isFinite(value) &&
+      Number.isFinite(date)
+    ) {
+
+      return {
+        value,
+        date
+      };
+
+    }
 
   }
+
+
+  return null;
+}
+
+
+/* =========================
+   TVL
+========================= */
+
+async function loadChainTvl(chain) {
+
+  return loadMetric(
+
+    "tvl",
+
+    chain,
+
+    (name) =>
+      "https://api.llama.fi/v2/historicalChainTvl/" +
+      encodeURIComponent(name),
+
+    (data) =>
+      parseLatestArray(
+        data,
+        (row) =>
+          row?.tvl
+      ),
+
+    "tvlLoading"
+
+  );
 
 }
 
@@ -351,259 +442,364 @@ async function loadChainTvl(chain) {
    Stablecoins
 ========================= */
 
-async function loadChainStablecoins(chain) {
+async function loadChainStablecoins(
+  chain
+) {
 
-  const chainName =
-    String(
-      chain?.name ||
-      chain?.chain ||
-      ""
-    ).trim();
+  return loadMetric(
 
-  if (!chainName) {
+    "stablecoins",
 
-    state.chainMetrics.stablecoinsLoading =
-      false;
+    chain,
 
-    state.chainMetrics.stablecoinsError =
-      "Missing chain name";
+    (name) =>
+      "https://stablecoins.llama.fi/stablecoincharts/" +
+      encodeURIComponent(name),
 
-    render();
+    (data) =>
+      parseLatestArray(
+        data,
+        (row) =>
+          row
+            ?.totalCirculatingUSD
+            ?.peggedUSD
+      ),
 
-    return;
-  }
+    "stablecoinsLoading"
 
-
-  console.log(
-    "[Stablecoins] Loading:",
-    chainName
   );
 
-
-  state.chainMetrics.stablecoinsLoading =
-    true;
-
-  state.chainMetrics.stablecoinsError =
-    null;
-
-  render();
+}
 
 
-  try {
+/* =========================
+   DEX Volume
+========================= */
 
-    const target =
-      "https://stablecoins.llama.fi/stablecoincharts/" +
-      encodeURIComponent(chainName);
+async function loadChainDexVolume(
+  chain
+) {
 
+  return loadMetric(
 
-    const url =
-      API +
-      "proxy?url=" +
-      encodeURIComponent(target);
+    "dexVolume",
 
+    chain,
 
-    console.log(
-      "[Stablecoins] Request:",
-      target
-    );
+    (name) =>
+      "https://api.llama.fi/overview/dexs/" +
+      encodeURIComponent(name),
 
-
-    const response =
-      await fetch(url, {
-        cache: "no-store"
-      });
-
-
-    console.log(
-      "[Stablecoins] HTTP:",
-      response.status
-    );
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        `HTTP ${response.status}`
-      );
-
-    }
-
-
-    const data =
-      await response.json();
-
-
-    console.log(
-      "[Stablecoins] Response:",
-      Array.isArray(data)
-        ? `array(${data.length})`
-        : data
-    );
-
-
-    if (!Array.isArray(data)) {
-
-      throw new Error(
-        "DeFiLlama 返回的稳定币数据不是数组"
-      );
-
-    }
-
-
-    /*
-      数据结构：
-
-      {
-        date,
-        totalCirculatingUSD: {
-          peggedUSD
-        }
-      }
-
-      我们使用：
-      totalCirculatingUSD.peggedUSD
-
-      它代表该链稳定币的美元规模。
-    */
-
-    let latest = null;
-
-
-    for (
-      let i = data.length - 1;
-      i >= 0;
-      i--
-    ) {
-
-      const row = data[i];
-
-      const date =
-        Number(row?.date);
+    (data) => {
 
       const value =
         Number(
-          row?.totalCirculatingUSD
-            ?.peggedUSD
+          data?.total24h
         );
 
 
       if (
-        Number.isFinite(date) &&
-        Number.isFinite(value) &&
-        value > 0
+        Number.isFinite(value)
       ) {
 
-        latest = {
+        return {
           value,
-          date
+          date:
+            Math.floor(
+              Date.now() / 1000
+            )
         };
 
-        break;
       }
 
-    }
+
+      return null;
+
+    },
+
+    "dexVolumeLoading"
+
+  );
+
+}
 
 
-    /*
-      如果没有找到 > 0，
-      再允许最后一条合法数据为 0。
-    */
+/* =========================
+   Fees
+========================= */
 
-    if (!latest) {
+async function loadChainFees(
+  chain
+) {
 
-      for (
-        let i = data.length - 1;
-        i >= 0;
-        i--
+  return loadMetric(
+
+    "fees",
+
+    chain,
+
+    (name) =>
+      "https://api.llama.fi/overview/fees/" +
+      encodeURIComponent(name) +
+      "?excludeTotalDataChart=true" +
+      "&excludeTotalDataChartBreakdown=true" +
+      "&dataType=dailyFees",
+
+    (data) => {
+
+      const value =
+        Number(
+          data?.total24h
+        );
+
+
+      if (
+        Number.isFinite(value)
       ) {
 
-        const row = data[i];
-
-        const date =
-          Number(row?.date);
-
-        const value =
-          Number(
-            row?.totalCirculatingUSD
-              ?.peggedUSD
-          );
-
-
-        if (
-          Number.isFinite(date) &&
-          Number.isFinite(value)
-        ) {
-
-          latest = {
-            value,
-            date
-          };
-
-          break;
-        }
+        return {
+          value,
+          date:
+            Math.floor(
+              Date.now() / 1000
+            )
+        };
 
       }
 
-    }
+
+      return null;
+
+    },
+
+    "feesLoading"
+
+  );
+
+}
 
 
-    if (!latest) {
+/* =========================
+   Revenue
+========================= */
 
-      throw new Error(
-        "没有找到有效稳定币数据"
-      );
+async function loadChainRevenue(
+  chain
+) {
 
-    }
+  return loadMetric(
 
+    "revenue",
 
-    console.log(
-      "[Stablecoins] Latest:",
-      latest
-    );
+    chain,
 
+    (name) =>
+      "https://api.llama.fi/overview/fees/" +
+      encodeURIComponent(name) +
+      "?excludeTotalDataChart=true" +
+      "&excludeTotalDataChartBreakdown=true" +
+      "&dataType=dailyRevenue",
 
-    state.chainMetrics.stablecoins =
-      latest.value;
+    (data) => {
 
-    state.chainMetrics.stablecoinsDate =
-      latest.date;
-
-    state.chainMetrics.stablecoinsError =
-      null;
-
-
-  } catch (error) {
-
-    console.error(
-      "[Stablecoins] Error:",
-      error
-    );
+      const value =
+        Number(
+          data?.total24h
+        );
 
 
-    state.chainMetrics.stablecoins =
-      null;
+      if (
+        Number.isFinite(value)
+      ) {
 
-    state.chainMetrics.stablecoinsDate =
-      null;
+        return {
+          value,
+          date:
+            Math.floor(
+              Date.now() / 1000
+            )
+        };
 
-    state.chainMetrics.stablecoinsError =
-      error?.message ||
-      String(error);
+      }
+
+
+      return null;
+
+    },
+
+    "revenueLoading"
+
+  );
+
+}
+
+
+/* =========================
+   Users
+========================= */
+
+async function loadChainUsers(
+  chain
+) {
+
+  return loadMetric(
+
+    "users",
+
+    chain,
+
+    (name) =>
+      "https://api.llama.fi/v2/metrics/active-users/chain/" +
+      encodeURIComponent(name) +
+      "?dataType=dailyActiveUsers",
+
+    (data) => {
+
+      const value =
+        Number(
+          data?.total24h
+        );
+
+
+      if (
+        Number.isFinite(value)
+      ) {
+
+        return {
+          value,
+          date:
+            Math.floor(
+              Date.now() / 1000
+            )
+        };
+
+      }
+
+
+      if (
+        Array.isArray(data)
+      ) {
+
+        return parseLatestArray(
+          data,
+          (row) =>
+            row?.value ??
+            row?.activeUsers
+        );
+
+      }
+
+
+      return null;
+
+    },
+
+    "usersLoading"
+
+  );
+
+}
+
+
+/* =========================
+   Metric Card
+========================= */
+
+function metricCard(
+  title,
+  value,
+  description
+) {
+
+  return `
+    <div class="card">
+
+      <b>
+        ${esc(title)}
+      </b>
+
+      <h2>
+        ${esc(value)}
+      </h2>
+
+      <p class="muted">
+        ${esc(description)}
+      </p>
+
+    </div>
+  `;
+
+}
+
+
+/* =========================
+   Metric Value
+========================= */
+
+function metricValue(
+  metrics,
+  key,
+  title,
+  description,
+  money = true
+) {
+
+  const loading =
+    metrics[
+      key + "Loading"
+    ];
+
+  const value =
+    metrics[key];
+
+  const date =
+    metrics[
+      key + "Date"
+    ];
+
+
+  let displayValue;
+
+
+  if (loading) {
+
+    displayValue =
+      "读取中...";
+
+  }
+  else {
+
+    displayValue =
+      money
+        ? formatUSD(value)
+        : formatNumber(value);
 
   }
 
 
-  state.chainMetrics.stablecoinsLoading =
-    false;
+  let text =
+    description;
 
 
   if (
-    state.page === "ecosystem"
+    date &&
+    Number.isFinite(
+      Number(value)
+    )
   ) {
 
-    render();
+    text +=
+      " · 数据时间 " +
+      formatDate(date);
 
   }
+
+
+  return metricCard(
+    title,
+    displayValue,
+    text
+  );
 
 }
 
@@ -615,28 +811,41 @@ async function loadChainStablecoins(chain) {
 function render() {
 
   const app =
-    document.querySelector("#app");
+    document.querySelector(
+      "#app"
+    );
 
-  if (!app) return;
+
+  if (!app) {
+    return;
+  }
 
 
   app.innerHTML = `
+
     <header class="header">
 
       <div class="brand">
         加密货币生态研究工具 V2 Final
       </div>
 
+
       <nav>
 
         ${NAV.map(
           ([id, name]) => `
+
             <button
-              class="nav"
+              class="nav ${
+                state.page === id
+                  ? "active"
+                  : ""
+              }"
               data-page="${id}"
             >
               ${name}
             </button>
+
           `
         ).join("")}
 
@@ -644,17 +853,23 @@ function render() {
 
     </header>
 
+
     <main>
 
       ${
         state.page === "search"
+
           ? searchPage()
+
           : state.page === "ecosystem"
+
             ? ecosystemPage()
+
             : dashboardPage()
       }
 
     </main>
+
   `;
 
 
@@ -670,6 +885,7 @@ function render() {
 function dashboardPage() {
 
   return `
+
     <section class="hero">
 
       <h1>
@@ -679,6 +895,7 @@ function dashboardPage() {
       <p class="muted">
         V2 Final
       </p>
+
 
       <div class="panel">
 
@@ -698,6 +915,7 @@ function dashboardPage() {
       </div>
 
     </section>
+
   `;
 
 }
@@ -716,6 +934,7 @@ function searchGroup(
   if (!items.length) {
 
     return `
+
       <section class="search-section">
 
         <h2>
@@ -727,17 +946,20 @@ function searchGroup(
         </div>
 
       </section>
+
     `;
 
   }
 
 
   return `
+
     <section class="search-section">
 
       <h2>
         ${title}
       </h2>
+
 
       <div class="search-list">
 
@@ -746,7 +968,9 @@ function searchGroup(
           const index =
             state.search.indexOf(x);
 
+
           return `
+
             <div
               class="card search-card"
               data-result="${index}"
@@ -766,27 +990,34 @@ function searchGroup(
 
                   ${
                     x.symbol
+
                       ? `
+
                         <span class="tag">
                           ${esc(x.symbol)}
                         </span>
+
                       `
+
                       : ""
                   }
 
                 </div>
 
+
                 <div class="search-source">
 
-                  ${esc(
-                    x.object_type === "chain"
-                      ? "公链"
-                      : x.object_type === "protocol"
-                        ? "协议"
-                        : x.object_type === "token"
-                          ? "代币"
-                          : "对象"
-                  )}
+                  ${
+                    esc(
+                      x.object_type === "chain"
+                        ? "公链"
+                        : x.object_type === "protocol"
+                          ? "协议"
+                          : x.object_type === "token"
+                            ? "代币"
+                            : "对象"
+                    )
+                  }
 
                   ·
 
@@ -803,15 +1034,20 @@ function searchGroup(
 
               ${
                 type === "chain"
+
                   ? `
+
                     <div class="search-action">
                       进入生态 →
                     </div>
+
                   `
+
                   : ""
               }
 
             </div>
+
           `;
 
         }).join("")}
@@ -819,6 +1055,7 @@ function searchGroup(
       </div>
 
     </section>
+
   `;
 
 }
@@ -858,11 +1095,13 @@ function searchPage() {
 
 
   return `
+
     <section>
 
       <h1>
         Search / Identity
       </h1>
+
 
       <p class="muted">
         搜索公链、协议和代币。
@@ -896,6 +1135,7 @@ function searchPage() {
 
           ${
             state.search.length
+
               ? `
 
                 ${searchGroup(
@@ -917,10 +1157,13 @@ function searchPage() {
                 )}
 
               `
+
               : `
+
                 <div class="empty">
                   输入关键词开始搜索。
                 </div>
+
               `
           }
 
@@ -929,6 +1172,7 @@ function searchPage() {
       </div>
 
     </section>
+
   `;
 
 }
@@ -954,102 +1198,37 @@ function ecosystemPage() {
     "-";
 
 
-  const metrics =
+  const m =
     state.chainMetrics;
 
 
-  /* =====================
-     TVL
-  ===================== */
+  const loadedCount = [
 
-  let tvlValue =
-    "NO_DATA";
+    m.tvl,
 
+    m.stablecoins,
 
-  let tvlDescription =
-    "Total Value Locked · 总锁仓价值";
+    m.dexVolume,
 
+    m.fees,
 
-  if (metrics.tvlLoading) {
+    m.revenue,
 
-    tvlValue =
-      "读取中...";
+    m.users
 
-  }
-  else if (
-    Number.isFinite(
-      Number(metrics.tvl)
-    )
-  ) {
-
-    tvlValue =
-      formatUSD(
-        metrics.tvl
-      );
+  ].filter(
+    x => x !== null
+  ).length;
 
 
-    if (metrics.tvlDate) {
-
-      tvlDescription +=
-        " · 数据时间 " +
-        formatDate(
-          metrics.tvlDate
-        );
-
-    }
-
-  }
-
-
-  /* =====================
-     Stablecoins
-  ===================== */
-
-  let stablecoinsValue =
-    "NO_DATA";
-
-
-  let stablecoinsDescription =
-    "稳定币规模";
-
-
-  if (
-    metrics.stablecoinsLoading
-  ) {
-
-    stablecoinsValue =
-      "读取中...";
-
-  }
-  else if (
-    Number.isFinite(
-      Number(metrics.stablecoins)
-    )
-  ) {
-
-    stablecoinsValue =
-      formatUSD(
-        metrics.stablecoins
-      );
-
-
-    if (
-      metrics.stablecoinsDate
-    ) {
-
-      stablecoinsDescription +=
-        " · 数据时间 " +
-        formatDate(
-          metrics.stablecoinsDate
-        );
-
-    }
-
-  }
+  const allMain =
+    loadedCount === 6;
 
 
   return `
+
     <section>
+
 
       <button
         id="backSearch"
@@ -1082,6 +1261,7 @@ function ecosystemPage() {
 
 
         <div class="data-grid">
+
 
           <div class="card">
 
@@ -1125,6 +1305,7 @@ function ecosystemPage() {
 
           </div>
 
+
         </div>
 
       </div>
@@ -1139,110 +1320,200 @@ function ecosystemPage() {
 
         <div class="data-grid">
 
-          ${metricCard(
+
+          ${metricValue(
+            m,
+            "tvl",
             "TVL",
-            tvlValue,
-            tvlDescription
+            "Total Value Locked · 总锁仓价值"
           )}
 
 
-          ${metricCard(
+          ${metricValue(
+            m,
+            "stablecoins",
             "Stablecoins",
-            stablecoinsValue,
-            stablecoinsDescription
+            "稳定币规模"
           )}
 
 
-          ${metricCard(
+          ${metricValue(
+            m,
+            "dexVolume",
             "DEX Volume",
-            "NO_DATA",
-            "去中心化交易所交易量"
+            "去中心化交易所 24h 交易量"
           )}
 
 
-          ${metricCard(
+          ${metricValue(
+            m,
+            "fees",
             "Fees",
-            "NO_DATA",
-            "协议产生的费用"
+            "协议 / 网络 24h 费用"
           )}
 
 
-          ${metricCard(
+          ${metricValue(
+            m,
+            "revenue",
             "Revenue",
-            "NO_DATA",
-            "协议收入"
+            "协议 / 网络 24h 收入"
           )}
 
 
-          ${metricCard(
+          ${metricValue(
+            m,
+            "users",
             "Users",
-            "NO_DATA",
-            "用户 / 活跃地址"
+            "24h 活跃地址 / 用户",
+            false
           )}
+
 
         </div>
 
 
         ${
-          metrics.tvlError
+          m.tvlError
+
             ? `
+
               <p class="muted">
+
                 TVL 数据读取失败：
-                ${esc(metrics.tvlError)}
+
+                ${esc(
+                  m.tvlError
+                )}
+
               </p>
+
             `
+
             : ""
         }
 
 
         ${
-          metrics.stablecoinsError
+          m.stablecoinsError
+
             ? `
+
               <p class="muted">
-                Stablecoins 数据读取失败：
+
+                Stablecoins
+                数据读取失败：
+
                 ${esc(
-                  metrics.stablecoinsError
+                  m.stablecoinsError
                 )}
+
               </p>
+
             `
+
             : ""
         }
 
 
         ${
-          metrics.tvl !== null &&
-          metrics.tvlDate
+          m.dexVolumeError
+
             ? `
+
               <p class="muted">
-                TVL 数据源：DeFiLlama
-                · 数据时间：
+
+                DEX Volume
+                数据读取失败：
+
                 ${esc(
-                  formatDate(
-                    metrics.tvlDate
-                  )
+                  m.dexVolumeError
                 )}
+
               </p>
+
             `
+
             : ""
         }
 
 
         ${
-          metrics.stablecoins !== null &&
-          metrics.stablecoinsDate
+          m.feesError
+
             ? `
+
               <p class="muted">
-                Stablecoins 数据源：DeFiLlama
-                · 数据时间：
+
+                Fees
+                数据读取失败：
+
                 ${esc(
-                  formatDate(
-                    metrics.stablecoinsDate
-                  )
+                  m.feesError
                 )}
+
               </p>
+
             `
+
             : ""
         }
+
+
+        ${
+          m.revenueError
+
+            ? `
+
+              <p class="muted">
+
+                Revenue
+                数据读取失败：
+
+                ${esc(
+                  m.revenueError
+                )}
+
+              </p>
+
+            `
+
+            : ""
+        }
+
+
+        ${
+          m.usersError
+
+            ? `
+
+              <p class="muted">
+
+                Users
+                数据读取失败：
+
+                ${esc(
+                  m.usersError
+                )}
+
+              </p>
+
+            `
+
+            : ""
+        }
+
+
+        <p class="muted">
+
+          数据源：DeFiLlama
+
+          · 页面只显示成功取得的真实数据；
+
+          无法确认时保持 NO_DATA。
+
+        </p>
+
 
       </div>
 
@@ -1253,8 +1524,11 @@ function ecosystemPage() {
           Protocols / 协议
         </h2>
 
+
         <div class="empty">
+
           生态协议数据将在下一阶段接入。
+
         </div>
 
       </div>
@@ -1268,6 +1542,7 @@ function ecosystemPage() {
 
 
         <div class="status-list">
+
 
           <div>
 
@@ -1295,22 +1570,20 @@ function ecosystemPage() {
 
             Metrics
 
-            <span class="${
-              metrics.tvl !== null &&
-              metrics.stablecoins !== null
-                ? "status-ok"
-                : "status-wait"
-            }">
+            <span
+              class="${
+                allMain
+                  ? "status-ok"
+                  : "status-wait"
+              }"
+            >
 
               ${
-                metrics.tvl !== null &&
-                metrics.stablecoins !== null
-                  ? "✓ TVL + Stablecoins 已接入"
-                  : metrics.tvl !== null
-                    ? "✓ TVL 已接入 · Stablecoins 等待中"
-                    : metrics.stablecoins !== null
-                      ? "✓ Stablecoins 已接入 · TVL 等待中"
-                      : "NO_DATA"
+                allMain
+
+                  ? "✓ 6 项核心指标已接入"
+
+                  : `已接入 ${loadedCount}/6 项`
               }
 
             </span>
@@ -1328,42 +1601,14 @@ function ecosystemPage() {
 
           </div>
 
+
         </div>
 
       </div>
 
+
     </section>
-  `;
 
-}
-
-
-/* =========================
-   Metric Card
-========================= */
-
-function metricCard(
-  title,
-  value,
-  description
-) {
-
-  return `
-    <div class="card">
-
-      <b>
-        ${esc(title)}
-      </b>
-
-      <h2>
-        ${esc(value)}
-      </h2>
-
-      <p class="muted">
-        ${esc(description)}
-      </p>
-
-    </div>
   `;
 
 }
@@ -1377,8 +1622,11 @@ function bind() {
 
 
   document
-    .querySelectorAll("[data-page]")
+    .querySelectorAll(
+      "[data-page]"
+    )
     .forEach((button) => {
+
 
       button.onclick = () => {
 
@@ -1391,6 +1639,7 @@ function bind() {
         render();
 
       };
+
 
     });
 
@@ -1413,7 +1662,9 @@ function bind() {
       input?.value.trim();
 
 
-    if (!q) return;
+    if (!q) {
+      return;
+    }
 
 
     state.query =
@@ -1435,13 +1686,12 @@ function bind() {
 
     } catch (error) {
 
-      state.search = [];
-
-
       console.error(
         "Search error:",
         error
       );
+
+      state.search = [];
 
     }
 
@@ -1476,8 +1726,11 @@ function bind() {
 
 
   document
-    .querySelectorAll("[data-result]")
+    .querySelectorAll(
+      "[data-result]"
+    )
     .forEach((item) => {
+
 
       item.onclick = () => {
 
@@ -1495,65 +1748,87 @@ function bind() {
           state.search[index];
 
 
-        if (type === "chain") {
+        if (
+          type !== "chain"
+        ) {
 
-          state.selectedChain =
-            x;
+          alert(
 
+            `${x?.name || "Unknown"}\n\n` +
 
-          state.chainMetrics = {
-            tvl: null,
-            tvlDate: null,
-            stablecoins: null,
-            stablecoinsDate: null,
-            tvlLoading: true,
-            stablecoinsLoading: true,
-            tvlError: null,
-            stablecoinsError: null
-          };
+            `类型：${
+              x?.object_type || "-"
+            }\n` +
 
+            `来源：${
+              x?.source ||
+              x?.source_label ||
+              "-"
+            }`
 
-          state.page =
-            "ecosystem";
-
-
-          location.hash =
-            "ecosystem";
-
-
-          render();
-
-
-          /*
-            同时开始读取：
-
-            1. TVL
-            2. Stablecoins
-
-            两者互相独立。
-          */
-
-          loadChainTvl(x);
-
-          loadChainStablecoins(x);
-
+          );
 
           return;
 
         }
 
 
-        alert(
-          `${x?.name || "Unknown"}\n\n` +
-          `类型：${
-            x?.object_type || "-"
-          }\n` +
-          `来源：${
-            x?.source ||
-            x?.source_label ||
-            "-"
-          }`
-        );
+        state.selectedChain =
+          x;
+
+
+        resetMetrics();
+
+
+        state.chainMetrics
+          .tvlLoading = true;
+
+        state.chainMetrics
+          .stablecoinsLoading = true;
+
+        state.chainMetrics
+          .dexVolumeLoading = true;
+
+        state.chainMetrics
+          .feesLoading = true;
+
+        state.chainMetrics
+          .revenueLoading = true;
+
+        state.chainMetrics
+          .usersLoading = true;
+
+
+        state.page =
+          "ecosystem";
+
+
+        location.hash =
+          "ecosystem";
+
+
+        render();
+
+
+        /*
+          六个指标同时读取。
+
+          如果某个接口失败，
+          该指标保持 NO_DATA，
+          不影响其他指标。
+        */
+
+        loadChainTvl(x);
+
+        loadChainStablecoins(x);
+
+        loadChainDexVolume(x);
+
+        loadChainFees(x);
+
+        loadChainRevenue(x);
+
+        loadChainUsers(x);
 
       };
 
@@ -1573,10 +1848,8 @@ function bind() {
       state.page =
         "search";
 
-
       location.hash =
         "search";
-
 
       render();
 
@@ -1598,7 +1871,6 @@ addEventListener(
     state.page =
       location.hash.slice(1) ||
       "dashboard";
-
 
     render();
 
