@@ -36,6 +36,7 @@ const esc = (x) =>
   })[c]);
 
 async function api(path) {
+
   const r = await fetch(API + path, {
     cache: "no-store"
   });
@@ -43,16 +44,20 @@ async function api(path) {
   const data = await r.json();
 
   if (!r.ok || data.ok === false) {
+
     throw new Error(
-      data.error?.message || `HTTP ${r.status}`
+      data.error?.message ||
+      `HTTP ${r.status}`
     );
+
   }
 
   return data;
 }
 
+
 /* =========================
-   DeFiLlama TVL
+   TVL
 ========================= */
 
 function formatUSD(value) {
@@ -82,6 +87,7 @@ function formatUSD(value) {
   return "$" + n.toFixed(2);
 }
 
+
 function formatDate(timestamp) {
 
   const n = Number(timestamp);
@@ -90,11 +96,7 @@ function formatDate(timestamp) {
     return "-";
   }
 
-  const d = new Date(
-    n < 10000000000
-      ? n * 1000
-      : n
-  );
+  const d = new Date(n * 1000);
 
   if (Number.isNaN(d.getTime())) {
     return "-";
@@ -112,26 +114,18 @@ function formatDate(timestamp) {
   );
 }
 
-function chainNameForDefiLlama(chain) {
-
-  if (!chain) {
-    return "";
-  }
-
-  return (
-    chain.name ||
-    chain.chain ||
-    chain.slug ||
-    ""
-  ).trim();
-}
 
 async function loadChainTvl(chain) {
 
   const chainName =
-    chainNameForDefiLlama(chain);
+    String(
+      chain?.name ||
+      chain?.chain ||
+      ""
+    ).trim();
 
   if (!chainName) {
+
     state.chainMetrics = {
       tvl: null,
       tvlDate: null,
@@ -139,8 +133,17 @@ async function loadChainTvl(chain) {
       error: "Missing chain name"
     };
 
+    render();
+
     return;
   }
+
+
+  console.log(
+    "[TVL] Loading:",
+    chainName
+  );
+
 
   state.chainMetrics = {
     tvl: null,
@@ -149,49 +152,80 @@ async function loadChainTvl(chain) {
     error: null
   };
 
+  render();
+
+
   try {
-
-    /*
-      通过我们现有的 /api/proxy
-      请求 DeFiLlama：
-
-      https://api.llama.fi/v2/historicalChainTvl/{chain}
-    */
 
     const target =
       "https://api.llama.fi/v2/historicalChainTvl/" +
       encodeURIComponent(chainName);
 
+
+    const url =
+      API +
+      "proxy?url=" +
+      encodeURIComponent(target);
+
+
+    console.log(
+      "[TVL] Request:",
+      target
+    );
+
+
     const response =
-      await fetch(
-        API +
-        "proxy?url=" +
-        encodeURIComponent(target),
-        {
-          cache: "no-store"
-        }
-      );
+      await fetch(url, {
+        cache: "no-store"
+      });
+
+
+    console.log(
+      "[TVL] HTTP:",
+      response.status
+    );
+
 
     if (!response.ok) {
+
       throw new Error(
         `HTTP ${response.status}`
       );
+
     }
+
 
     const data =
       await response.json();
 
+
+    console.log(
+      "[TVL] Response:",
+      Array.isArray(data)
+        ? `array(${data.length})`
+        : data
+    );
+
+
     if (!Array.isArray(data)) {
+
       throw new Error(
-        "Invalid DeFiLlama TVL response"
+        "DeFiLlama 返回的数据不是数组"
       );
+
     }
 
+
     /*
-      找到最后一个有效 TVL 数据。
+      从最后往前找。
+      
+      只接受：
+      tvl > 0
+      date 有效
     */
 
     let latest = null;
+
 
     for (
       let i = data.length - 1;
@@ -202,18 +236,15 @@ async function loadChainTvl(chain) {
       const row = data[i];
 
       const tvl =
-        Number(
-          row?.tvl
-        );
+        Number(row?.tvl);
 
       const date =
-        Number(
-          row?.date
-        );
+        Number(row?.date);
+
 
       if (
         Number.isFinite(tvl) &&
-        tvl >= 0 &&
+        tvl > 0 &&
         Number.isFinite(date)
       ) {
 
@@ -224,13 +255,64 @@ async function loadChainTvl(chain) {
 
         break;
       }
+
     }
 
+
+    /*
+      如果没有找到 > 0 的数据，
+      再允许最后一条合法数据为 0。
+    */
+
     if (!latest) {
-      throw new Error(
-        "No valid TVL data"
-      );
+
+      for (
+        let i = data.length - 1;
+        i >= 0;
+        i--
+      ) {
+
+        const row = data[i];
+
+        const tvl =
+          Number(row?.tvl);
+
+        const date =
+          Number(row?.date);
+
+
+        if (
+          Number.isFinite(tvl) &&
+          Number.isFinite(date)
+        ) {
+
+          latest = {
+            tvl,
+            date
+          };
+
+          break;
+        }
+
+      }
+
     }
+
+
+    if (!latest) {
+
+      throw new Error(
+        "没有找到有效 TVL 数据"
+      );
+
+    }
+
+
+    console.log(
+      "[TVL] Latest:",
+      latest
+    );
+
 
     state.chainMetrics = {
       tvl: latest.tvl,
@@ -239,37 +321,44 @@ async function loadChainTvl(chain) {
       error: null
     };
 
+
   } catch (error) {
 
     console.error(
-      "DeFiLlama TVL error:",
+      "[TVL] Error:",
       error
     );
+
 
     state.chainMetrics = {
       tvl: null,
       tvlDate: null,
       loading: false,
-      error: String(
-        error?.message || error
-      )
+      error:
+        error?.message ||
+        String(error)
     };
+
   }
 
+
   /*
-    TVL 加载完成后重新渲染生态页。
+    请求完成后重新画页面。
   */
 
   if (
-    state.page === "ecosystem" &&
-    state.selectedChain === chain
+    state.page === "ecosystem"
   ) {
+
     render();
+
   }
+
 }
 
+
 /* =========================
-   Main Render
+   Render
 ========================= */
 
 function render() {
@@ -279,6 +368,7 @@ function render() {
 
   if (!app) return;
 
+
   app.innerHTML = `
     <header class="header">
 
@@ -287,14 +377,18 @@ function render() {
       </div>
 
       <nav>
-        ${NAV.map(([id, name]) => `
-          <button
-            class="nav"
-            data-page="${id}"
-          >
-            ${name}
-          </button>
-        `).join("")}
+
+        ${NAV.map(
+          ([id, name]) => `
+            <button
+              class="nav"
+              data-page="${id}"
+            >
+              ${name}
+            </button>
+          `
+        ).join("")}
+
       </nav>
 
     </header>
@@ -312,8 +406,11 @@ function render() {
     </main>
   `;
 
+
   bind();
+
 }
+
 
 /* =========================
    Dashboard
@@ -351,10 +448,12 @@ function dashboardPage() {
 
     </section>
   `;
+
 }
 
+
 /* =========================
-   Search
+   Search Group
 ========================= */
 
 function searchGroup(
@@ -378,7 +477,9 @@ function searchGroup(
 
       </section>
     `;
+
   }
+
 
   return `
     <section class="search-section">
@@ -393,9 +494,6 @@ function searchGroup(
 
           const index =
             state.search.indexOf(x);
-
-          const isChain =
-            type === "chain";
 
           return `
             <div
@@ -451,8 +549,9 @@ function searchGroup(
 
               </div>
 
+
               ${
-                isChain
+                type === "chain"
                   ? `
                     <div class="search-action">
                       进入生态 →
@@ -470,7 +569,13 @@ function searchGroup(
 
     </section>
   `;
+
 }
+
+
+/* =========================
+   Search Page
+========================= */
 
 function searchPage() {
 
@@ -482,6 +587,7 @@ function searchPage() {
       )
       .slice(0, 10);
 
+
   const protocols =
     state.search
       .filter(
@@ -490,6 +596,7 @@ function searchPage() {
       )
       .slice(0, 10);
 
+
   const tokens =
     state.search
       .filter(
@@ -497,6 +604,7 @@ function searchPage() {
           x.object_type === "token"
       )
       .slice(0, 10);
+
 
   return `
     <section>
@@ -510,6 +618,7 @@ function searchPage() {
         公链优先显示。
       </p>
 
+
       <div class="panel">
 
         <div class="search-box">
@@ -521,6 +630,7 @@ function searchPage() {
             value="${esc(state.query)}"
           >
 
+
           <button
             id="searchButton"
             class="button"
@@ -530,11 +640,13 @@ function searchPage() {
 
         </div>
 
+
         <div id="searchResults">
 
           ${
             state.search.length
               ? `
+
                 ${searchGroup(
                   "⭐ 公链 Chain",
                   chains,
@@ -552,6 +664,7 @@ function searchPage() {
                   tokens,
                   "token"
                 )}
+
               `
               : `
                 <div class="empty">
@@ -566,10 +679,12 @@ function searchPage() {
 
     </section>
   `;
+
 }
 
+
 /* =========================
-   Ecosystem
+   Ecosystem Page
 ========================= */
 
 function ecosystemPage() {
@@ -577,44 +692,63 @@ function ecosystemPage() {
   const chain =
     state.selectedChain || {};
 
+
   const name =
     chain.name ||
     "Unknown";
+
 
   const symbol =
     chain.symbol ||
     "-";
 
+
   const metrics =
     state.chainMetrics;
 
-  let tvlValue = "NO_DATA";
+
+  let tvlValue =
+    "NO_DATA";
+
+
   let tvlDescription =
     "Total Value Locked · 总锁仓价值";
+
 
   if (metrics.loading) {
 
     tvlValue =
       "读取中...";
 
-  } else if (
+  }
+  else if (
     Number.isFinite(
       Number(metrics.tvl)
     )
   ) {
 
     tvlValue =
-      formatUSD(metrics.tvl);
-
-    tvlDescription =
-      "Total Value Locked · 总锁仓价值" +
-      (
-        metrics.tvlDate
-          ? ` · 数据时间 ${formatDate(metrics.tvlDate)}`
-          : ""
+      formatUSD(
+        metrics.tvl
       );
 
+
+    tvlDescription =
+      "Total Value Locked · 总锁仓价值";
+
+
+    if (metrics.tvlDate) {
+
+      tvlDescription +=
+        " · 数据时间 " +
+        formatDate(
+          metrics.tvlDate
+        );
+
+    }
+
   }
+
 
   return `
     <section>
@@ -625,6 +759,7 @@ function ecosystemPage() {
       >
         ← 返回搜索
       </button>
+
 
       <div class="hero">
 
@@ -640,11 +775,13 @@ function ecosystemPage() {
 
       </div>
 
+
       <div class="panel">
 
         <h2>
           基本身份
         </h2>
+
 
         <div class="data-grid">
 
@@ -660,6 +797,7 @@ function ecosystemPage() {
 
           </div>
 
+
           <div class="card">
 
             <b>
@@ -671,6 +809,7 @@ function ecosystemPage() {
             </p>
 
           </div>
+
 
           <div class="card">
 
@@ -692,11 +831,13 @@ function ecosystemPage() {
 
       </div>
 
+
       <div class="panel">
 
         <h2>
           生态研究
         </h2>
+
 
         <div class="data-grid">
 
@@ -706,11 +847,13 @@ function ecosystemPage() {
             tvlDescription
           )}
 
+
           ${metricCard(
             "Stablecoins",
             "NO_DATA",
             "稳定币规模"
           )}
+
 
           ${metricCard(
             "DEX Volume",
@@ -718,17 +861,20 @@ function ecosystemPage() {
             "去中心化交易所交易量"
           )}
 
+
           ${metricCard(
             "Fees",
             "NO_DATA",
             "协议产生的费用"
           )}
 
+
           ${metricCard(
             "Revenue",
             "NO_DATA",
             "协议收入"
           )}
+
 
           ${metricCard(
             "Users",
@@ -737,6 +883,7 @@ function ecosystemPage() {
           )}
 
         </div>
+
 
         ${
           metrics.error
@@ -748,6 +895,7 @@ function ecosystemPage() {
             `
             : ""
         }
+
 
         ${
           metrics.tvl !== null &&
@@ -768,6 +916,7 @@ function ecosystemPage() {
 
       </div>
 
+
       <div class="panel">
 
         <h2>
@@ -780,31 +929,40 @@ function ecosystemPage() {
 
       </div>
 
+
       <div class="panel">
 
         <h2>
           研究状态
         </h2>
 
+
         <div class="status-list">
 
           <div>
+
             Identity
 
             <span class="status-ok">
               ✓ 已识别
             </span>
+
           </div>
 
+
           <div>
+
             Ecosystem
 
             <span class="status-ok">
               ✓ 已建立
             </span>
+
           </div>
 
+
           <div>
+
             Metrics
 
             <span class="${
@@ -823,12 +981,15 @@ function ecosystemPage() {
 
           </div>
 
+
           <div>
+
             Research
 
             <span class="status-wait">
               未开始
             </span>
+
           </div>
 
         </div>
@@ -837,7 +998,9 @@ function ecosystemPage() {
 
     </section>
   `;
+
 }
+
 
 /* =========================
    Metric Card
@@ -866,13 +1029,16 @@ function metricCard(
 
     </div>
   `;
+
 }
 
+
 /* =========================
-   Events
+   Bind
 ========================= */
 
 function bind() {
+
 
   document
     .querySelectorAll("[data-page]")
@@ -892,24 +1058,31 @@ function bind() {
 
     });
 
+
   const input =
     document.querySelector(
       "#searchInput"
     );
+
 
   const searchButton =
     document.querySelector(
       "#searchButton"
     );
 
+
   async function doSearch() {
 
     const q =
       input?.value.trim();
 
+
     if (!q) return;
 
-    state.query = q;
+
+    state.query =
+      q;
+
 
     try {
 
@@ -919,12 +1092,15 @@ function bind() {
           encodeURIComponent(q)
         );
 
+
       state.search =
         result.items || [];
+
 
     } catch (error) {
 
       state.search = [];
+
 
       console.error(
         "Search error:",
@@ -933,20 +1109,27 @@ function bind() {
 
     }
 
+
     render();
+
   }
+
 
   if (input) {
 
-    input.onkeydown = (e) => {
+    input.onkeydown =
+      (e) => {
 
-      if (e.key === "Enter") {
-        doSearch();
-      }
+        if (e.key === "Enter") {
 
-    };
+          doSearch();
+
+        }
+
+      };
 
   }
+
 
   if (searchButton) {
 
@@ -954,6 +1137,7 @@ function bind() {
       doSearch;
 
   }
+
 
   document
     .querySelectorAll("[data-result]")
@@ -966,21 +1150,20 @@ function bind() {
             item.dataset.result
           );
 
+
         const type =
           item.dataset.type;
 
+
         const x =
           state.search[index];
+
 
         if (type === "chain") {
 
           state.selectedChain =
             x;
 
-          /*
-            每次进入新的公链，
-            先清空旧 TVL。
-          */
 
           state.chainMetrics = {
             tvl: null,
@@ -989,23 +1172,29 @@ function bind() {
             error: null
           };
 
+
           state.page =
             "ecosystem";
+
 
           location.hash =
             "ecosystem";
 
+
           render();
 
+
           /*
-            页面显示“读取中...”
-            后台读取真实 TVL。
+            开始读取 TVL
           */
 
           loadChainTvl(x);
 
+
           return;
+
         }
+
 
         alert(
           `${x?.name || "Unknown"}\n\n` +
@@ -1023,10 +1212,12 @@ function bind() {
 
     });
 
+
   const backSearch =
     document.querySelector(
       "#backSearch"
     );
+
 
   if (backSearch) {
 
@@ -1035,8 +1226,10 @@ function bind() {
       state.page =
         "search";
 
+
       location.hash =
         "search";
+
 
       render();
 
@@ -1045,6 +1238,7 @@ function bind() {
   }
 
 }
+
 
 /* =========================
    Hash Change
@@ -1058,10 +1252,12 @@ addEventListener(
       location.hash.slice(1) ||
       "dashboard";
 
+
     render();
 
   }
 );
+
 
 /* =========================
    Start
