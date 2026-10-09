@@ -16,7 +16,14 @@ const state = {
   page: location.hash.slice(1) || "dashboard",
 
   search: [],
+  searchError: "",
   query: "",
+
+  selfCheck: {
+    running: false,
+    checkedAt: null,
+    results: []
+  },
 
   selectedChain: null,
   selectedProtocol: null,
@@ -1350,7 +1357,11 @@ function render() {
 
                 ? tokenPage()
 
-                : dashboardPage()
+                : state.page === "system"
+
+                  ? systemPage()
+
+                  : dashboardPage()
       }
 
     </main>
@@ -1402,6 +1413,81 @@ function dashboardPage() {
     </section>
 
   `;
+
+}
+
+
+/* =========================
+   System Self-Check
+========================= */
+
+function systemPage() {
+
+  const results = state.selfCheck.results || [];
+
+  const statusText = (status) => {
+    if (status === "ok") return "正常";
+    if (status === "error") return "异常";
+    if (status === "checking") return "检查中";
+    if (status === "registered") return "已接入";
+    return "未检查";
+  };
+
+  const statusClass = (status) => {
+    if (status === "ok") return "status-ok";
+    if (status === "error") return "status-wait";
+    return "muted";
+  };
+
+  const modules = [
+    {
+      name: "前端界面",
+      detail: "已定义前端应用与页面分发；实际运行状态以本页接口检查为准",
+      status: "registered"
+    },
+    {
+      name: "搜索模块",
+      detail: "查询公链、协议和代币；运行时检查会发起一次 Ethereum 搜索",
+      status: results.find(x => x.id === "search")?.status || "idle"
+    },
+    {
+      name: "后端健康接口",
+      detail: "请求 /api/health；用于确认 API 服务可响应",
+      status: results.find(x => x.id === "health")?.status || "idle"
+    },
+    {
+      name: "公链详情模块",
+      detail: "页面入口已接入；公链指标数据需单独验证",
+      status: "registered"
+    },
+    {
+      name: "协议详情模块",
+      detail: "页面入口已接入；TVL 等外部数据需单独验证",
+      status: "registered"
+    },
+    {
+      name: "代币详情模块",
+      detail: "页面入口已接入；市场字段可能显示 NO_DATA",
+      status: "registered"
+    }
+  ];
+
+  return `<br><br>    <section class="hero"><br><br>      <h1>系统自检中心</h1><br><br>      <p class="muted"><br>        检查模块入口、后端健康接口和搜索接口。模块“已接入”不代表所有外部数据源都正常。<br>      </p><br><br>      <div class="panel"><br>        <h2>运行检查</h2><br>        <button id="runSelfCheck" class="button" ${state.selfCheck.running ? "disabled" : ""}><br>          ${state.selfCheck.running ? "检查中…" : "运行自检"}<br>        </button><br>        <p class="muted"><br>          ${state.selfCheck.checkedAt ? "最近检查：" + esc(state.selfCheck.checkedAt) : "尚未运行接口检查。"}<br>        </p><br>      </div><br><br>      <div class="panel"><br>        <h2>模块状态</h2><br>        <div class="status-list"><br>          ${modules.map((m) => `
+            <div class="card">
+              <b>${esc(m.name)}</b>
+              <span class="${statusClass(m.status)}" style="float:right">
+                ${statusText(m.status)}
+              </span>
+              <p class="muted">${esc(m.detail)}</p>
+            </div>
+          `).join("")}<br>        </div><br>      </div><br><br>      ${results.length ? `
+        <div class="panel">
+          <h2>接口检查结果</h2>
+          <div class="status-list">
+            ${results.map((r) => `<br>              <div class="card"><br>                <b>${esc(r.name)}</b><br>                <span class="${statusClass(r.status)}" style="float:right"><br>                  ${statusText(r.status)}<br>                </span><br>                <p class="muted">${esc(r.detail)}</p><br>                ${Number.isFinite(r.durationMs) ? `<p class="muted">耗时：${r.durationMs} ms</p>` : ""}<br>              </div><br>            `).join("")}
+          </div>
+        </div>
+      ` : ""}<br><br>      <div class="panel"><br>        <h2>检查范围说明</h2><br>        <p class="muted"><br>          本自检会检查前端模块入口，并请求健康接口及一次 Ethereum 搜索。它不会逐项验证 D1 每张表、DeFiLlama 各指标或 CoinGecko 全部代币数据；这些需要后续扩展为独立检查项。<br>        </p><br>      </div><br><br>    </section><br><br>  `;
 
 }
 
@@ -1636,6 +1722,11 @@ function searchPage() {
 
         </div>
 
+        ${
+          state.searchError
+            ? `<p class="muted" role="status">${esc(state.searchError)}</p>`
+            : ""
+        }
 
         <div id="searchResults">
 
@@ -1667,7 +1758,7 @@ function searchPage() {
               : `
 
                 <div class="empty">
-                  输入关键词开始搜索。
+                  ${state.searchError ? "" : (state.query ? "没有找到匹配结果。" : "输入关键词开始搜索。")}
                 </div>
 
               `
@@ -2966,6 +3057,81 @@ function tokenPage() {
 
 function bind() {
 
+  const selfCheckButton =
+    document.querySelector("#runSelfCheck");
+
+  if (selfCheckButton) {
+    selfCheckButton.onclick = async () => {
+      state.selfCheck.running = true;
+      state.selfCheck.results = [
+        {
+          id: "health",
+          name: "后端健康接口",
+          status: "checking",
+          detail: "正在请求 /api/health"
+        },
+        {
+          id: "search",
+          name: "搜索接口",
+          status: "checking",
+          detail: "正在查询 Ethereum"
+        }
+      ];
+      render();
+
+      const runProbe = async (id, name, path, describe) => {
+        const started = performance.now();
+        try {
+          const data = await api(path);
+          const durationMs = Math.round(performance.now() - started);
+
+          if (id === "search" && !Array.isArray(data.items)) {
+            throw new Error("接口响应缺少 items 数组");
+          }
+
+          if (id === "search" && data.items.length === 0) {
+            return {
+              id, name, status: "error", durationMs,
+              detail: "接口可响应，但 Ethereum 查询返回 0 条结果；需进一步检查数据源"
+            };
+          }
+
+          return {
+            id, name, status: "ok", durationMs,
+            detail: describe(data)
+          };
+        } catch (error) {
+          return {
+            id, name, status: "error",
+            durationMs: Math.round(performance.now() - started),
+            detail: error?.message || "请求失败"
+          };
+        }
+      };
+
+      const results = await Promise.all([
+        runProbe(
+          "health",
+          "后端健康接口",
+          "health",
+          () => "健康接口返回成功响应"
+        ),
+        runProbe(
+          "search",
+          "搜索接口",
+          "search?q=ethereum",
+          (data) => "成功返回 " + data.items.length + " 条结果"
+        )
+      ]);
+
+      state.selfCheck.results = results;
+      state.selfCheck.running = false;
+      state.selfCheck.checkedAt = new Date().toLocaleString();
+      render();
+    };
+  }
+
+
 
   document
     .querySelectorAll(
@@ -3018,6 +3184,8 @@ function bind() {
     state.query =
       q;
 
+    state.searchError = "";
+
 
     try {
 
@@ -3031,6 +3199,8 @@ function bind() {
       state.search =
         result.items || [];
 
+      state.searchError = "";
+
 
     } catch (error) {
 
@@ -3040,6 +3210,10 @@ function bind() {
       );
 
       state.search = [];
+
+      state.searchError =
+        error?.message ||
+        "搜索失败，请稍后重试";
 
     }
 
