@@ -3,9 +3,9 @@ const API = "/api/";
 const NAV = [
   ["dashboard", "Dashboard"],
   ["search", "Search"],
-  ["ecosystems", "Ecosystems"],
-  ["protocols", "Protocols"],
-  ["tokens", "Tokens"],
+  ["ecosystem", "Ecosystems"],
+  ["protocol", "Protocols"],
+  ["token", "Tokens"],
   ["research", "Research"],
   ["reports", "Reports"],
   ["learning", "Learning"],
