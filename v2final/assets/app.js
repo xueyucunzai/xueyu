@@ -1472,7 +1472,7 @@ function systemPage() {
     }
   ];
 
-  return `<br><br>    <section class="hero"><br><br>      <h1>系统自检中心</h1><br><br>      <p class="muted"><br>        检查模块入口、后端健康接口和搜索接口。模块“已接入”不代表所有外部数据源都正常。<br>      </p><br><br>      <div class="panel"><br>        <h2>运行检查</h2><br>        <button id="runSelfCheck" class="button" ${state.selfCheck.running ? "disabled" : ""}><br>          ${state.selfCheck.running ? "检查中…" : "运行自检"}<br>        </button><br>        <p class="muted"><br>          ${state.selfCheck.checkedAt ? "最近检查：" + esc(state.selfCheck.checkedAt) : "尚未运行接口检查。"}<br>        </p><br>      </div><br><br>      <div class="panel"><br>        <h2>模块状态</h2><br>        <div class="status-list"><br>          ${modules.map((m) => `
+  return `<br><br>    <section class="hero"><br><br>      <h1>系统自检中心</h1><br><br>      <p class="muted"><br>        检查模块入口、后端健康接口和搜索接口。模块“已接入”不代表所有外部数据源都正常。<br>      </p><br><br>      <div class="panel"><br>        <h2>运行检查</h2><br>        <button id="runSelfCheck" class="button" ${state.selfCheck.running ? "disabled" : ""}><br>          ${state.selfCheck.running ? "检查中…" : "运行自检"}<br>        </button><br>        <button id="copySelfCheckReport" class="button" type="button">复制检查结果</button><br>        <p class="muted"><br>          ${state.selfCheck.checkedAt ? "最近检查：" + esc(state.selfCheck.checkedAt) : "尚未运行接口检查。"}<br>        </p><br>      </div><br><br>      <div class="panel"><br>        <h2>模块状态</h2><br>        <div class="status-list"><br>          ${modules.map((m) => `
             <div class="card">
               <b>${esc(m.name)}</b>
               <span class="${statusClass(m.status)}" style="float:right">
@@ -3132,6 +3132,58 @@ function bind() {
   }
 
 
+
+  const copySelfCheckButton = document.querySelector("#copySelfCheckReport");
+
+  if (copySelfCheckButton) {
+    copySelfCheckButton.onclick = async () => {
+      const health = state.selfCheck.results.find(x => x.id === "health");
+      const search = state.selfCheck.results.find(x => x.id === "search");
+      const report = [
+        "加密货币生态研究工具 V2 Final · 系统自检报告",
+        "最近检查：" + (state.selfCheck.checkedAt || "尚未运行"),
+        "",
+        "模块状态：",
+        "前端界面：已接入",
+        "搜索模块：" + (search?.status === "ok" ? "正常" : search?.status === "error" ? "异常" : "未检查"),
+        "后端健康接口：" + (health?.status === "ok" ? "正常" : health?.status === "error" ? "异常" : "未检查"),
+        "公链详情模块：已接入（指标数据需单独验证）",
+        "协议详情模块：已接入（TVL 等外部数据需单独验证）",
+        "代币详情模块：已接入（市场字段可能显示 NO_DATA）",
+        "",
+        "接口检查结果：",
+        ...(state.selfCheck.results.length
+          ? state.selfCheck.results.map(x => [
+              x.name + "：" + (x.status === "ok" ? "正常" : x.status === "error" ? "异常" : "检查中"),
+              "详情：" + x.detail,
+              Number.isFinite(x.durationMs) ? "耗时：" + x.durationMs + " ms" : ""
+            ].filter(Boolean).join("\n"))
+          : ["尚未运行接口检查。"]),
+        "",
+        "检查范围：本自检只检查前端模块入口、/api/health 和一次 Ethereum 搜索；不会逐项验证 D1 每张表、DeFiLlama 各指标或 CoinGecko 全部代币数据。"
+      ].join("\n");
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(report);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = report;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          const copied = document.execCommand("copy");
+          textarea.remove();
+          if (!copied) throw new Error("浏览器未允许复制");
+        }
+        copySelfCheckButton.textContent = "已复制检查结果";
+      } catch (error) {
+        copySelfCheckButton.textContent = "复制失败，请检查浏览器权限";
+      }
+    };
+  }
 
   document
     .querySelectorAll(
