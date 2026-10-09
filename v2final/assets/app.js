@@ -1456,6 +1456,11 @@ function systemPage() {
       status: results.find(x => x.id === "health")?.status || "idle"
     },
     {
+      name: "D1 数据表自检",
+      detail: "请求 /api/self-check；逐表检查 D1 表是否存在且可读取",
+      status: results.find(x => x.id === "self-check")?.status || "idle"
+    },
+    {
       name: "公链详情模块",
       detail: "页面入口已接入；公链指标数据需单独验证",
       status: "registered"
@@ -1472,7 +1477,7 @@ function systemPage() {
     }
   ];
 
-  return `<br><br>    <section class="hero"><br><br>      <h1>系统自检中心</h1><br><br>      <p class="muted"><br>        检查模块入口、后端健康接口和搜索接口。模块“已接入”不代表所有外部数据源都正常。<br>      </p><br><br>      <div class="panel"><br>        <h2>运行检查</h2><br>        <button id="runSelfCheck" class="button" ${state.selfCheck.running ? "disabled" : ""}><br>          ${state.selfCheck.running ? "检查中…" : "运行自检"}<br>        </button><br>        <button id="copySelfCheckReport" class="button" type="button">复制检查结果</button><br>        <p class="muted"><br>          ${state.selfCheck.checkedAt ? "最近检查：" + esc(state.selfCheck.checkedAt) : "尚未运行接口检查。"}<br>        </p><br>      </div><br><br>      <div class="panel"><br>        <h2>模块状态</h2><br>        <div class="status-list"><br>          ${modules.map((m) => `
+  return `<br><br>    <section class="hero"><br><br>      <h1>系统自检中心</h1><br><br>      <p class="muted"><br>        检查模块入口、后端健康接口、搜索接口和 D1 数据表可读取状态。模块“已接入”不代表所有外部数据源都正常。<br>      </p><br><br>      <div class="panel"><br>        <h2>运行检查</h2><br>        <button id="runSelfCheck" class="button" ${state.selfCheck.running ? "disabled" : ""}><br>          ${state.selfCheck.running ? "检查中…" : "运行自检"}<br>        </button><br>        <button id="copySelfCheckReport" class="button" type="button">复制检查结果</button><br>        <p class="muted"><br>          ${state.selfCheck.checkedAt ? "最近检查：" + esc(state.selfCheck.checkedAt) : "尚未运行接口检查。"}<br>        </p><br>      </div><br><br>      <div class="panel"><br>        <h2>模块状态</h2><br>        <div class="status-list"><br>          ${modules.map((m) => `
             <div class="card">
               <b>${esc(m.name)}</b>
               <span class="${statusClass(m.status)}" style="float:right">
@@ -1484,10 +1489,10 @@ function systemPage() {
         <div class="panel">
           <h2>接口检查结果</h2>
           <div class="status-list">
-            ${results.map((r) => `<br>              <div class="card"><br>                <b>${esc(r.name)}</b><br>                <span class="${statusClass(r.status)}" style="float:right"><br>                  ${statusText(r.status)}<br>                </span><br>                <p class="muted">${esc(r.detail)}</p><br>                ${Number.isFinite(r.durationMs) ? `<p class="muted">耗时：${r.durationMs} ms</p>` : ""}<br>              </div><br>            `).join("")}
+            ${results.map((r) => `<br>              <div class="card"><br>                <b>${esc(r.name)}</b><br>                <span class="${statusClass(r.status)}" style="float:right"><br>                  ${statusText(r.status)}<br>                </span><br>                <p class="muted">${esc(r.detail)}</p><br>                ${Number.isFinite(r.durationMs) ? `<p class="muted">耗时：${r.durationMs} ms</p>` : ""}<br>                ${r.id === "self-check" && Array.isArray(r.tableResults) ? `<details><summary>查看逐表结果（${r.tableResults.length} 张）</summary><div class="status-list">${r.tableResults.map(t => `<p>${esc(t.table)}：${t.ok ? "正常" : "异常"}；记录数 ${esc(t.count ?? "NO_DATA")}${t.error ? "；" + esc(t.error) : ""}</p>`).join("")}</div></details>` : ""}<br>              </div><br>            `).join("")}
           </div>
         </div>
-      ` : ""}<br><br>      <div class="panel"><br>        <h2>检查范围说明</h2><br>        <p class="muted"><br>          本自检会检查前端模块入口，并请求健康接口及一次 Ethereum 搜索。它不会逐项验证 D1 每张表、DeFiLlama 各指标或 CoinGecko 全部代币数据；这些需要后续扩展为独立检查项。<br>        </p><br>      </div><br><br>    </section><br><br>  `;
+      ` : ""}<br><br>      <div class="panel"><br>        <h2>检查范围说明</h2><br>        <p class="muted"><br>          本自检会检查前端模块入口、健康接口、一次 Ethereum 搜索，并读取 /api/self-check 的逐表结果。D1 表检查只确认表可读取及记录数查询成功，不代表表内业务数据完整；若汇总字段与逐表结果不一致，应按异常处理。此检查也不会逐项验证 DeFiLlama 各指标或 CoinGecko 全部代币数据。<br>        </p><br>      </div><br><br>    </section><br><br>  `;
 
 }
 
@@ -1595,8 +1600,21 @@ function searchGroup(
                   ${esc(
                     x.source ||
                     x.source_label ||
-                    "D1"
+                    (
+                      x.is_external === true
+                        ? "外部来源未知"
+                        : x.is_external === false
+                          ? "D1"
+                          : "来源未知"
+                    )
                   )}
+
+                  ${x.is_external === true
+                    ? " · 外部结果，未确认入库"
+                    : x.is_external === false
+                      ? " · 本地结果"
+                      : " · 入库状态未知"
+                  }
 
                 </div>
 
@@ -3075,6 +3093,12 @@ function bind() {
           name: "搜索接口",
           status: "checking",
           detail: "正在查询 Ethereum"
+        },
+        {
+          id: "self-check",
+          name: "D1 数据表自检",
+          status: "checking",
+          detail: "正在请求 /api/self-check"
         }
       ];
       render();
@@ -3089,6 +3113,27 @@ function bind() {
             throw new Error("接口响应缺少 items 数组");
           }
 
+          if (id === "self-check" && (
+            !Array.isArray(data.results) ||
+            !Number.isFinite(Number(data.total)) ||
+            !Number.isFinite(Number(data.failed))
+          )) {
+            throw new Error("D1 自检响应格式不符合预期");
+          }
+
+          if (id === "self-check" && Number(data.failed) > 0) {
+            const failedTables = data.results
+              .filter(x => !x.ok)
+              .map(x => x.table);
+            return {
+              id, name, status: "error", durationMs,
+              detail: "D1 表检查：" + (data.passed ?? 0) + "/" + data.total +
+                " 通过，失败 " + data.failed + " 张" +
+                (failedTables.length ? "；失败表：" + failedTables.join("、") : ""),
+              tableResults: data.results
+            };
+          }
+
           if (id === "search" && data.items.length === 0) {
             return {
               id, name, status: "error", durationMs,
@@ -3098,7 +3143,8 @@ function bind() {
 
           return {
             id, name, status: "ok", durationMs,
-            detail: describe(data)
+            detail: describe(data),
+            ...(id === "self-check" ? { tableResults: data.results } : {})
           };
         } catch (error) {
           return {
@@ -3121,6 +3167,13 @@ function bind() {
           "搜索接口",
           "search?q=ethereum",
           (data) => "成功返回 " + data.items.length + " 条结果"
+        ),
+        runProbe(
+          "self-check",
+          "D1 数据表自检",
+          "self-check",
+          (data) => "D1 表检查：" + data.passed + "/" + data.total +
+            " 通过，失败 " + data.failed + " 张"
         )
       ]);
 
@@ -3139,6 +3192,7 @@ function bind() {
     copySelfCheckButton.onclick = async () => {
       const health = state.selfCheck.results.find(x => x.id === "health");
       const search = state.selfCheck.results.find(x => x.id === "search");
+      const selfCheck = state.selfCheck.results.find(x => x.id === "self-check");
       const report = [
         "加密货币生态研究工具 V2 Final · 系统自检报告",
         "最近检查：" + (state.selfCheck.checkedAt || "尚未运行"),
@@ -3147,6 +3201,8 @@ function bind() {
         "前端界面：已接入",
         "搜索模块：" + (search?.status === "ok" ? "正常" : search?.status === "error" ? "异常" : "未检查"),
         "后端健康接口：" + (health?.status === "ok" ? "正常" : health?.status === "error" ? "异常" : "未检查"),
+        "D1 数据表自检：" + (selfCheck?.status === "ok" ? "正常" : selfCheck?.status === "error" ? "异常" : "未检查"),
+        "D1 自检详情：" + (selfCheck?.detail || "尚未运行 D1 表检查"),
         "公链详情模块：已接入（指标数据需单独验证）",
         "协议详情模块：已接入（TVL 等外部数据需单独验证）",
         "代币详情模块：已接入（市场字段可能显示 NO_DATA）",
@@ -3156,11 +3212,18 @@ function bind() {
           ? state.selfCheck.results.map(x => [
               x.name + "：" + (x.status === "ok" ? "正常" : x.status === "error" ? "异常" : "检查中"),
               "详情：" + x.detail,
+              ...(x.id === "self-check" && Array.isArray(x.tableResults)
+                ? ["逐表结果：", ...x.tableResults.map(t =>
+                    "  " + t.table + "：" + (t.ok ? "正常" : "异常") +
+                    "；记录数 " + (t.count ?? "NO_DATA") +
+                    (t.error ? "；" + t.error : "")
+                  )]
+                : []),
               Number.isFinite(x.durationMs) ? "耗时：" + x.durationMs + " ms" : ""
             ].filter(Boolean).join("\n"))
           : ["尚未运行接口检查。"]),
         "",
-        "检查范围：本自检只检查前端模块入口、/api/health 和一次 Ethereum 搜索；不会逐项验证 D1 每张表、DeFiLlama 各指标或 CoinGecko 全部代币数据。"
+        "检查范围：本自检检查前端模块入口、/api/health、一次 Ethereum 搜索，以及 /api/self-check 返回的 D1 表可读取状态；不会验证每张表的数据完整性，也不会逐项验证 DeFiLlama 各指标或 CoinGecko 全部代币数据。"
       ].join("\n");
 
       try {
